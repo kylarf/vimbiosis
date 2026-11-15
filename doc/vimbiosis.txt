@@ -1,0 +1,31 @@
+*vimbiosis.txt*  Vim and coding agent integration
+
+VIMBIOSIS                                                *vimbiosis*
+
+Install this repository at pack/vendor/start/vimbiosis. Add its bin directory
+to PATH for external agent processes. The :Agent command sets PATH for agent
+terminals it starts.
+
+COMMANDS                                                *vimbiosis-commands*
+
+:Agent {codex|claude} [arguments]  Start an agent in a terminal split.
+:AgentAttach                       Attach the current Vim to an external agent.
+:AgentStatus                       Show bridge status.
+:AgentDetach                       Stop the bridge and detach.
+:AgentFollow                       Toggle automatic file following.
+
+After :AgentAttach, evaluate the printed export command in the external
+agent's shell. The variable must be inherited when the agent starts.
+
+CLI                                                     *vimbiosis-cli*
+
+vimbiosis status
+vimbiosis buffers
+vimbiosis read-buffer FILE [--start N --end M]
+vimbiosis open FILE [--line N --column N --vertical]
+vimbiosis notify FILE...
+
+Buffer reads return live contents, including unsaved edits. Writes to a
+modified buffer are reported as conflicts and are not silently reloaded.
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

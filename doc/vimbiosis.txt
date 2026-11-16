@@ -79,6 +79,12 @@ timer, including while Vim is idle in a terminal. The timer stops when the
 bridge closes. Editor requests have a five-second bridge deadline; the CLI
 waits longer so it can receive and report that timeout rather than racing it.
 
+When refreshing a clean buffer, Vimbiosis temporarily enables that buffer's
+'autoread' while switching to it and reloading. Otherwise Vim can wait for an
+external-file-change confirmation before the reload command runs. The original
+buffer-local setting is restored afterwards; global 'autoread' is unchanged.
+Unsaved buffers are still blocked and are never forcibly reloaded.
+
 For an intermittent delay, inspect :echo g:vimbiosis_trace after reproducing.
 This bounded in-memory trace contains the last 64 queued/started/replied events
 with request IDs, operation names, monotonic timestamps, and Vim modes. It

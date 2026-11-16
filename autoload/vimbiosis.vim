@@ -184,6 +184,19 @@ function! vimbiosis#open(request) abort
   return {'ok': v:true, 'path': l:path, 'line': line('.')}
 endfunction
 
+function! s:reload(window, buffer) abort
+  let l:autoread = getbufvar(a:buffer, '&l:autoread')
+  call setbufvar(a:buffer, '&autoread', 1)
+  try
+    call win_execute(a:window, 'silent keepalt buffer ' . a:buffer)
+    call win_execute(a:window, 'silent keepalt edit')
+  finally
+    if bufexists(a:buffer)
+      call setbufvar(a:buffer, '&autoread', l:autoread)
+    endif
+  endtry
+endfunction
+
 function! vimbiosis#refresh(file, ...) abort
   let l:path = fnamemodify(a:file, ':p')
   let l:buf = bufnr(l:path)
@@ -198,7 +211,7 @@ function! vimbiosis#refresh(file, ...) abort
   endif
   for l:win in getwininfo()
     if l:win.tabnr == tabpagenr() && l:win.bufnr == l:buf
-      call win_execute(l:win.winid, 'silent keepalt edit')
+      call s:reload(l:win.winid, l:buf)
       return l:win.winid
     endif
   endfor
@@ -211,8 +224,7 @@ function! vimbiosis#refresh(file, ...) abort
   if !exists('g:vimbiosis_live_win') || empty(getwininfo(g:vimbiosis_live_win))
     let g:vimbiosis_live_win = s:split(0)
   endif
-  call win_execute(g:vimbiosis_live_win, 'execute "buffer " . ' . l:buf)
-  call win_execute(g:vimbiosis_live_win, 'silent keepalt edit')
+  call s:reload(g:vimbiosis_live_win, l:buf)
   call win_gotoid(l:current)
   return g:vimbiosis_live_win
 endfunction

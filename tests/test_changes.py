@@ -81,6 +81,9 @@ class ChangeTests(unittest.TestCase):
                 "call assert_true(getloclist(win_id2win(g:vimbiosis_live_win), {'winid': 0}).winid > 0)",
                 "call assert_equal(bufnr(" + json.dumps(str(files[-1])) +
                 "), getwininfo(g:vimbiosis_live_win)[0].bufnr)",
+                "call assert_equal(-1, getbufvar(bufnr(" + json.dumps(str(files[-1])) +
+                "), '&l:autoread'))",
+                "call assert_false(&autoread)",
                 "VbioPrevious",
                 "call assert_equal(['new'], getline(1, '$'))",
                 "call assert_equal('VimbiosisChanged', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",

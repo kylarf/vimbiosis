@@ -29,30 +29,43 @@ root, folder = map(pathlib.Path, sys.argv[1:])
 files = [folder / ('file' + str(i) + '.txt') for i in range(3)]
 for path in files:
     path.write_text('one\\ntwo\\nthree\\n')
-patch = '*** Begin Patch\\n' + ''.join(
-    '*** Update File: ' + str(path) + '\\n' for path in files) + '*** End Patch'
-payload = {'tool_input': {'command': patch}, 'cwd': str(folder), 'tool_use_id': 'batch'}
-def hook(event):
-    payload['hook_event_name'] = event
-    return subprocess.run([sys.executable, str(root / 'codex/hooks/post-edit.py')],
+events = []
+def hook(event, paths, key):
+    patch = '*** Begin Patch\\n' + ''.join(
+        '*** Update File: ' + str(path) + '\\n' for path in paths) + '*** End Patch'
+    payload = {'hook_event_name': event, 'tool_input': {'command': patch},
+               'cwd': str(folder), 'tool_use_id': key}
+    start = time.monotonic()
+    result = subprocess.run([sys.executable, str(root / 'codex/hooks/post-edit.py')],
         input=json.dumps(payload), capture_output=True, text=True, timeout=9)
-# Leave Vim waiting for terminal input before each synchronous hook.
+    events.append({'event': event, 'key': key, 'seconds': time.monotonic() - start,
+                   'stdout': result.stdout, 'stderr': result.stderr, 'code': result.returncode})
+    return not result.stdout and result.returncode == 0
+# Load one file, switch away, then revisit it after another on-disk edit.
+# Leave autoread off, matching Vim's default.
 time.sleep(4.2)
-before = hook('PreToolUse')
-for path in files:
-    path.write_text('one\\nchanged\\nthree\\n')
-start = time.monotonic()
-time.sleep(.4)
-after = hook('PostToolUse')
-(folder / 'done').write_text(json.dumps({
-    'elapsed': time.monotonic() - start, 'pre': before.stdout, 'post': after.stdout,
-    'pre_error': before.stderr, 'post_error': after.stderr,
-    'returncodes': [before.returncode, after.returncode]}))
+for key, paths, line, text in [
+    ('initial', files[:1], 0, 'first edit'),
+    ('batch', files, 1, 'second edit'),
+    ('reverse', list(reversed(files)), 2, 'third edit with extra text'),
+    ('repeat', files[:1], 0, 'fourth edit in another region'),
+]:
+    if not hook('PreToolUse', paths, key):
+        break
+    for path in paths:
+        lines = path.read_text().splitlines()
+        lines[line] = text
+        path.write_text('\\n'.join(lines) + '\\n')
+    time.sleep(.1)
+    if not hook('PostToolUse', paths, key):
+        break
+(folder / 'done').write_text(json.dumps({'events': events}))
 """)
             boot = directory / "boot.vim"
             command = [sys.executable, str(probe), str(ROOT), tmp]
             boot.write_text("\n".join([
                 "set noswapfile",
+                "set noautoread hidden",
                 "autocmd FileType qf wincmd J",
                 "set rtp^=" + str(ROOT),
                 "call vimbiosis#start_bridge()",
@@ -68,16 +81,18 @@ after = hook('PostToolUse')
             screen = b""
             try:
                 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
-                deadline = time.monotonic() + 9
+                deadline = time.monotonic() + 20
                 while (not done.exists() or not done.read_text()) and time.monotonic() < deadline:
                     if select.select([fd], [], [], .03)[0]:
                         screen += os.read(fd, 65536)
                 self.assertTrue(done.exists(), "Hook did not finish without a keypress")
                 result = json.loads(done.read_text())
-                self.assertEqual(result["returncodes"], [0, 0], result)
-                self.assertEqual(result["pre"], "", result)
-                self.assertEqual(result["post"], "", result)
-                self.assertLess(result["elapsed"], 2, result)
+                self.assertEqual(len(result["events"]), 8, result)
+                for event in result["events"]:
+                    self.assertEqual(event["code"], 0, event)
+                    self.assertEqual(event["stdout"], "", event)
+                    self.assertEqual(event["stderr"], "", event)
+                    self.assertLess(event["seconds"], 2, event)
                 self.assertNotIn(b"Press ENTER", screen)
                 self.assertNotIn(b"-- More --", screen)
             finally:

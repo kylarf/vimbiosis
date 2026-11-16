@@ -2,7 +2,7 @@ function! vimbiosis#start_bridge() abort
   if exists('g:vimbiosis_job') && job_status(g:vimbiosis_job) ==# 'run'
     return
   endif
-  let s:root = fnamemodify(expand('<sfile>:p'), ':h:h')
+  let s:root = fnamemodify(expand('<script>:p'), ':h:h')
   let s:socket = tempname() . '.sock'
   let s:token = printf('%x-%x-%s', localtime(), getpid(), fnamemodify(tempname(), ':t'))
   let l:cmd = [s:root . '/bin/vimbiosis', 'bridge', '--socket', s:socket, '--token', s:token]

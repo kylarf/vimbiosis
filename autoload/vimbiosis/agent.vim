@@ -3,9 +3,15 @@ function! vimbiosis#agent#start(args, mods) abort
   let l:parts = split(a:args)
   let l:agent = remove(l:parts, 0)
   if index(['codex', 'claude'], l:agent) < 0 | throw 'vimbiosis: agent must be codex or claude' | endif
-  let l:env = 'VIMBIOSIS_SESSION=' . shellescape(g:vimbiosis_socket . ':' . g:vimbiosis_token)
-  let l:env .= ' PATH=' . shellescape(g:vimbiosis_root . '/bin:' . $PATH)
-  execute a:mods . ' split | terminal ' . l:env . ' ' . l:agent . ' ' . join(map(l:parts, 'shellescape(v:val)'), ' ')
+  let l:env = {
+        \ 'VIMBIOSIS_SESSION': g:vimbiosis_socket . ':' . g:vimbiosis_token,
+        \ 'PATH': g:vimbiosis_root . '/bin:' . $PATH}
+  execute a:mods . ' new'
+  let l:buf = term_start([l:agent] + l:parts, {
+        \ 'curwin': 1, 'env': l:env, 'term_name': 'Vimbiosis: ' . l:agent})
+  if l:buf == 0
+    throw 'vimbiosis: failed to start agent terminal'
+  endif
   let g:vimbiosis_anchor_win = win_getid()
 endfunction
 

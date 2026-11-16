@@ -66,6 +66,17 @@ function! vimbiosis#dispatch(request) abort
   return {'ok': v:false, 'error': 'unknown operation'}
 endfunction
 
+function! s:split(vertical) abort
+  call win_gotoid(get(g:, 'vimbiosis_anchor_win', win_getid()))
+  let l:wide = winwidth(0) >= 2 * winheight(0)
+  if a:vertical || l:wide
+    belowright vertical split
+  else
+    aboveleft split
+  endif
+  return win_getid()
+endfunction
+
 function! vimbiosis#open(request) abort
   let l:path = fnamemodify(get(a:request, 'path', ''), ':p')
   let l:existing = bufnr(l:path)
@@ -78,7 +89,7 @@ function! vimbiosis#open(request) abort
   if l:win > 0
     call win_gotoid(l:win)
   else
-    if get(a:request, 'vertical', v:false) | vertical split | else | split | endif
+    call s:split(get(a:request, 'vertical', v:false))
     execute 'edit ' . fnameescape(l:path)
   endif
   call cursor(max([1, get(a:request, 'line', 1)]), max([1, get(a:request, 'column', 1)]))
@@ -100,11 +111,8 @@ function! vimbiosis#refresh(file) abort
     let l:buf = bufadd(l:path)
   endif
   call bufload(l:buf)
-  if !exists('g:vimbiosis_live_win') || win_id2win(g:vimbiosis_live_win) == 0
-    let g:vimbiosis_anchor = l:current
-    let l:wide = winwidth(0) * 2 >= winheight(0)
-    if l:wide | vertical split | else | split | endif
-    let g:vimbiosis_live_win = win_getid()
+  if !exists('g:vimbiosis_live_win') || empty(getwininfo(g:vimbiosis_live_win))
+    let g:vimbiosis_live_win = s:split(0)
   endif
   call win_execute(g:vimbiosis_live_win, 'execute "buffer " . ' . l:buf)
   call win_gotoid(l:current)

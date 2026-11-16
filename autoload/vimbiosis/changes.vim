@@ -116,6 +116,23 @@ function! vimbiosis#changes#show_if_multiple() abort
   endtry
 endfunction
 
+function! vimbiosis#changes#toggle() abort
+  let l:current = win_getid()
+  if !win_gotoid(s:owner)
+    echomsg 'No agent changes to review'
+    return
+  endif
+  if getloclist(0, {'winid': 0}).winid > 0
+    lclose
+    call win_gotoid(l:current)
+  elseif empty(s:entries)
+    call win_gotoid(l:current)
+    echomsg 'No agent changes to review'
+  else
+    lopen
+  endif
+endfunction
+
 function! vimbiosis#changes#navigate(action) abort
   if empty(s:entries) || !win_gotoid(s:owner)
     echomsg 'No agent changes to review'

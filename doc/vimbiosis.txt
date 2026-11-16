@@ -14,6 +14,7 @@ COMMANDS                                                *vimbiosis-commands*
 :VbioDetach                       Stop the bridge and detach.
 :VbioFollow                       Toggle automatic file following.
 :VbioChanges                      Open the change location list.
+:VbioToggleChanges                Toggle the agent change location list.
 :VbioNext                         Jump to the next changed region.
 :VbioPrevious                     Jump to the previous changed region.
 :VbioClear                        Clear this buffer's change markers.
@@ -57,6 +58,10 @@ regions for that file. :VbioChangesClear clears both the list and all markers.
 entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file
 window, the standard :lnext, :lprevious, :lopen and :lclose commands also work.
 Each entry includes its file, line, kind of change, and added/deleted counts.
+:VbioToggleChanges toggles this specific list from any window. The plugin
+installs no default keybindings. For example, add this to your vimrc:
+    nnoremap <silent> <leader>c :VbioToggleChanges<CR>
+
 When the list contains changes to multiple files, it opens automatically after
 the edit batch finishes, without moving keyboard focus. Its initial height is
 at most five rows. An already open list is updated without resetting its size.

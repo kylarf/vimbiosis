@@ -1,3 +1,7 @@
+let s:requests = []
+let s:pump = -1
+let s:draining = 0
+
 function! vimbiosis#start_bridge() abort
   if exists('g:vimbiosis_job') && job_status(g:vimbiosis_job) ==# 'run'
     return
@@ -15,6 +19,23 @@ function! vimbiosis#start_bridge() abort
   let g:vimbiosis_socket = s:socket
   let g:vimbiosis_token = s:token
   let g:vimbiosis_root = s:root
+  if s:pump != -1
+    call timer_stop(s:pump)
+  endif
+  let s:requests = []
+  let s:pump = timer_start(50, function('s:drain'), {'repeat': -1})
+endfunction
+
+function! s:trace(event, message) abort
+  if !exists('g:vimbiosis_trace')
+    let g:vimbiosis_trace = []
+  endif
+  call add(g:vimbiosis_trace, {'event': a:event, 'id': a:message.id,
+        \ 'operation': get(a:message.request, 'op', ''),
+        \ 'time': reltimefloat(reltime()), 'mode': mode(1)})
+  if len(g:vimbiosis_trace) > 64
+    call remove(g:vimbiosis_trace, 0)
+  endif
 endfunction
 
 function! s:message(channel, message) abort
@@ -22,6 +43,26 @@ function! s:message(channel, message) abort
   if type(l:m) != v:t_dict || !has_key(l:m, 'id') || !has_key(l:m, 'request')
     return
   endif
+  call s:trace('queued', l:m)
+  call add(s:requests, [a:channel, l:m])
+endfunction
+
+function! s:drain(timer) abort
+  if s:draining || empty(s:requests)
+    return
+  endif
+  let s:draining = 1
+  try
+    let l:item = remove(s:requests, 0)
+    call s:execute(l:item[0], l:item[1])
+  finally
+    let s:draining = 0
+  endtry
+endfunction
+
+function! s:execute(channel, message) abort
+  let l:m = a:message
+  call s:trace('started', l:m)
   try
     if get(l:m.request, 'op', '') ==# 'notify'
       silent let l:result = vimbiosis#dispatch(l:m.request)
@@ -33,9 +74,18 @@ function! s:message(channel, message) abort
     let l:result = {'ok': v:false, 'error': v:exception}
   endtry
   call ch_sendexpr(a:channel, {'reply_to': l:m.id, 'result': l:result})
+  call s:trace('replied', l:m)
 endfunction
 
 function! s:closed(channel) abort
+  if exists('g:vimbiosis_job') && job_getchannel(g:vimbiosis_job) != a:channel
+    return
+  endif
+  if s:pump != -1
+    call timer_stop(s:pump)
+    let s:pump = -1
+  endif
+  let s:requests = []
   unlet! g:vimbiosis_job
 endfunction
 

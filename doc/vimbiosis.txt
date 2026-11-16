@@ -72,4 +72,16 @@ to suit your colorscheme. They do not alter the file contents or syntax rules.
 Older Vim builds without sign functions retain refresh and change-list support
 but omit the highlights and gutter markers.
 
+DIAGNOSTICS                                             *vimbiosis-diagnostics*
+
+Bridge requests are queued by the channel callback and processed by a 50ms
+timer, including while Vim is idle in a terminal. The timer stops when the
+bridge closes. Editor requests have a five-second bridge deadline; the CLI
+waits longer so it can receive and report that timeout rather than racing it.
+
+For an intermittent delay, inspect :echo g:vimbiosis_trace after reproducing.
+This bounded in-memory trace contains the last 64 queued/started/replied events
+with request IDs, operation names, monotonic timestamps, and Vim modes. It
+contains no file paths, buffer contents, or attachment tokens.
+
  vim:tw=78:ts=8:noet:ft=help:norl:

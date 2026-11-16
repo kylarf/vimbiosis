@@ -35,11 +35,14 @@ payload = {'tool_input': {'command': patch}, 'cwd': str(folder), 'tool_use_id': 
 def hook(event):
     payload['hook_event_name'] = event
     return subprocess.run([sys.executable, str(root / 'codex/hooks/post-edit.py')],
-        input=json.dumps(payload), capture_output=True, text=True, timeout=7)
+        input=json.dumps(payload), capture_output=True, text=True, timeout=9)
+# Leave Vim waiting for terminal input before each synchronous hook.
+time.sleep(4.2)
 before = hook('PreToolUse')
 for path in files:
     path.write_text('one\\nchanged\\nthree\\n')
 start = time.monotonic()
+time.sleep(.4)
 after = hook('PostToolUse')
 (folder / 'done').write_text(json.dumps({
     'elapsed': time.monotonic() - start, 'pre': before.stdout, 'post': after.stdout,
@@ -65,7 +68,7 @@ after = hook('PostToolUse')
             screen = b""
             try:
                 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
-                deadline = time.monotonic() + 4
+                deadline = time.monotonic() + 9
                 while (not done.exists() or not done.read_text()) and time.monotonic() < deadline:
                     if select.select([fd], [], [], .03)[0]:
                         screen += os.read(fd, 65536)

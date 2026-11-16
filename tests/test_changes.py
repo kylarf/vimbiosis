@@ -6,14 +6,39 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from changes import hunks, Snapshots
 from hooks import targets
+import vimbiosis
 
 
 class ChangeTests(unittest.TestCase):
+    def test_bridge_timeout_reaches_client(self):
+        with tempfile.TemporaryDirectory(prefix="vbio-timeout-", dir="/tmp") as tmp:
+            address = str(Path(tmp) / "bridge.sock")
+            code = ("import sys; sys.path.insert(0, " + repr(str(ROOT / "python")) +
+                    "); import vimbiosis; vimbiosis.VIM_REPLY_TIMEOUT = .1; vimbiosis.main()")
+            proc = subprocess.Popen(
+                [sys.executable, "-c", code, "bridge", "--socket", address, "--token", "test"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 3
+                while not Path(address).exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue(Path(address).exists())
+                with mock.patch.dict(os.environ, {"VIMBIOSIS_SESSION": address + ":test"}):
+                    reply = vimbiosis.send_payload({"op": "status"})
+                self.assertEqual(reply, {"ok": False, "error": "Vim request timed out"})
+            finally:
+                proc.terminate()
+                proc.wait(timeout=3)
+                proc.stdin.close()
+                proc.stdout.close()
+                proc.stderr.close()
+
     def test_ranges(self):
         self.assertEqual(hunks(["same"], ["same"]), [])
         self.assertEqual(hunks([], ["new"])[0]["kind"], "added")
@@ -125,8 +150,10 @@ class ChangeTests(unittest.TestCase):
                 "\\ 'conflict': getbufline(bufnr(" + q(conflict) + "), 1, '$')}",
                 "VbioChangesClear",
                 "let state.cleared = sign_getplaced(added_buffer, {'group': 'Vimbiosis'})[0].signs",
-                "call writefile([json_encode(state)], " + q(result) + ")",
                 "call job_stop(g:vimbiosis_job)",
+                "sleep 100m",
+                "let state.remaining_pumps = len(filter(timer_info(), 'string(v:val.callback) =~# \"drain\"'))",
+                "call writefile([json_encode(state)], " + q(result) + ")",
                 "qa!",
             ])
             proc = subprocess.Popen(
@@ -189,6 +216,7 @@ class ChangeTests(unittest.TestCase):
                 self.assertEqual(Path(state["previous_file"]).resolve(), edited.resolve())
                 self.assertEqual(Path(state["next_file"]).resolve(), added.resolve())
                 self.assertEqual(state["cleared"], [])
+                self.assertEqual(state["remaining_pumps"], 0)
             finally:
                 if proc.poll() is None:
                     proc.terminate()

@@ -9,6 +9,9 @@ import threading
 import uuid
 from changes import Snapshots
 
+VIM_REPLY_TIMEOUT = 5
+CLIENT_TIMEOUT = VIM_REPLY_TIMEOUT + 3
+
 
 def send_payload(request):
     descriptor = os.environ.get("VIMBIOSIS_SESSION")
@@ -17,7 +20,7 @@ def send_payload(request):
     address, token = descriptor.rsplit(":", 1)
     try:
         with socket.socket(socket.AF_UNIX) as client:
-            client.settimeout(5)
+            client.settimeout(CLIENT_TIMEOUT)
             client.connect(address)
             client.sendall((json.dumps({"token": token, "request": request}) + "\n").encode())
             return json.loads(client.makefile().readline())
@@ -68,7 +71,7 @@ def bridge(args):
                     pending[key] = [event, None]
                 with output_lock:
                     print(json.dumps([0, {"id": key, "request": request}]), flush=True)
-                if event.wait(5):
+                if event.wait(VIM_REPLY_TIMEOUT):
                     result = pending[key][1]
                     if operation == "before" and result.get("ok"):
                         with lock:

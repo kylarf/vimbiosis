@@ -14,6 +14,8 @@ ln -s "$VIMBIOSIS_ROOT/codex/skills/workspace-context" "$HOME/.agents/skills/vim
 
 Codex also supports repository skills in `.agents/skills/`. Avoid replacing an existing skill with the same destination name.
 
+In your `AGENTS.md`, add an instruction to use the `vimbiosis-show-code` skill when you ask where code is or ask to see it. This lets Codex open the relevant code in your Vim session when appropriate.
+
 ## Edit hooks
 
 Append this TOML to `~/.codex/config.toml`:

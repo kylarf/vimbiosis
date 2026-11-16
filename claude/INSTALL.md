@@ -14,23 +14,45 @@ ln -s "$VIMBIOSIS_ROOT/claude/skills/workspace-context" "$HOME/.claude/skills/vi
 
 Claude Code also supports project skills in `.claude/skills/` if you prefer to enable these only for one repository. Avoid replacing an existing skill with the same destination name.
 
-## Post-edit hook
+## Edit hooks
 
-Add this entry to the existing `hooks.PostToolUse` array in `~/.claude/settings.json`:
+Merge these entries into the corresponding hook arrays in `~/.claude/settings.json`:
 
 ```json
 {
-  "matcher": "Edit|Write",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "python3",
-      "args": ["$VIMBIOSIS_ROOT/claude/hooks/post-edit.py"]
-    }
-  ]
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["$VIMBIOSIS_ROOT/claude/hooks/post-edit.py"]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["$VIMBIOSIS_ROOT/claude/hooks/post-edit.py"]
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
-Claude's hook command does not expand your shell's `$VIMBIOSIS_ROOT` in `args`. Replace that string with the absolute path to `post-edit.py`. Merge the entry into the existing JSON object; do not replace the settings file or its other hooks. Restart Claude Code after changing settings. Hooks run after `Edit` and `Write` calls and send file paths to Vim when `VIMBIOSIS_SESSION` is set.
+Claude's hook command does not expand your shell's `$VIMBIOSIS_ROOT` in `args`. Replace that string with the absolute path to `post-edit.py`. Preserve the settings file's other hooks and settings, and avoid duplicating an existing Vimbiosis entry. Restart Claude Code after changing settings.
 
-To uninstall, remove these two skill links and only this hook entry from the settings array.
+The same script handles both events. Before `Edit` or `Write`, it checks the affected Vim buffer for unsaved text. A conflict blocks the tool and asks the agent to pause for your decision; save or reconcile the buffer in Vim before retrying. It does not save, reload, or discard your unsaved work. Once the check passes, it captures a before snapshot. After the edit, it refreshes Vim and records added, changed, and deleted regions in the change list. A conflict introduced while the tool was running is reported through the post-edit hook.
+
+Both hooks are silent no-ops when `VIMBIOSIS_SESSION` is unset. Existing post-only setups still refresh, but can only mark the whole file without a before snapshot. These hooks cover direct `Edit` and `Write` calls, not writes performed by shell commands or external formatters.
+
+To uninstall, remove these two skill links and only the Vimbiosis entries from the two hook arrays.

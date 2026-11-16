@@ -7,3 +7,7 @@ Add this checkout's `bin/` directory to `PATH` for external agent sessions. `:Vb
 Commands include `:VbioStatus`, `:VbioDetach`, and `:VbioFollow`. The `vimbiosis` CLI provides `status`, `buffers`, `read-buffer`, `open`, and `notify`. Follow the [Claude setup guide](claude/INSTALL.md) or [Codex setup guide](codex/INSTALL.md) to link the skills and add the post-edit hook while preserving your existing configuration.
 
 The bridge uses Vim's job and JSON channel callbacks. It requires Python 3 and a Vim built with `+job`, `+channel`, `+timers`, and `+json`; terminal launching also requires `+terminal`. The bridge uses a private Unix-domain socket on macOS/Linux.
+
+Configure both pre- and post-edit hooks using the setup guide for your agent. Pre-edit checks block direct edits when a Vim buffer contains unsaved work and ask the agent to wait for your decision. Passing checks capture a before snapshot so completed edits can highlight added/changed lines and mark deletions.
+
+Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and `:VbioPrevious` to navigate them. Entering Insert mode clears the current buffer's highlights and deletion signs while retaining the change list. `:VbioClear` clears the current buffer's markers manually; `:VbioChangesClear` clears the list and all its markers. See `:help vimbiosis-changes`.

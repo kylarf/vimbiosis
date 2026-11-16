@@ -8,3 +8,13 @@ command! VbioAttach call vimbiosis#agent#attach()
 command! VbioStatus call vimbiosis#agent#status()
 command! VbioDetach call vimbiosis#agent#detach()
 command! VbioFollow call vimbiosis#agent#follow()
+command! VbioChanges call vimbiosis#changes#navigate('open')
+command! VbioNext call vimbiosis#changes#navigate('next')
+command! VbioPrevious call vimbiosis#changes#navigate('previous')
+command! VbioClear call vimbiosis#changes#clear(bufnr('%'))
+command! VbioChangesClear call vimbiosis#changes#reset()
+
+augroup vimbiosis_changes
+  autocmd!
+  autocmd InsertEnter * call vimbiosis#changes#clear(bufnr('%'))
+augroup END

@@ -14,7 +14,7 @@ ln -s "$VIMBIOSIS_ROOT/codex/skills/workspace-context" "$HOME/.agents/skills/vim
 
 Codex also supports repository skills in `.agents/skills/`. Avoid replacing an existing skill with the same destination name.
 
-## Post-edit hook
+## Edit hooks
 
 Append this TOML to `~/.codex/config.toml`:
 
@@ -25,8 +25,21 @@ matcher = "^apply_patch$"
 [[hooks.PostToolUse.hooks]]
 type = "command"
 command = 'python3 "ABSOLUTE_PATH_TO_VIMBIOSIS/codex/hooks/post-edit.py"'
+
+[[hooks.PreToolUse]]
+matcher = "^apply_patch$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = 'python3 "ABSOLUTE_PATH_TO_VIMBIOSIS/codex/hooks/post-edit.py"'
 ```
 
-Replace `ABSOLUTE_PATH_TO_VIMBIOSIS` with this checkout's path. Append these hook tables alongside existing settings; do not overwrite `config.toml`. Codex runs the hook after `apply_patch`, and it forwards the changed paths to Vim when `VIMBIOSIS_SESSION` is set.
+Replace `ABSOLUTE_PATH_TO_VIMBIOSIS` with this checkout's path. Merge these hook tables alongside existing settings; do not overwrite `config.toml` or duplicate an existing Vimbiosis entry. Review and enable the hooks through Codex's hook trust UI after updating them.
+
+The same script handles both events. Before an edit, it checks all affected Vim buffers for unsaved text. A conflict blocks the tool and asks the agent to pause for your decision; save or reconcile the buffer in Vim before retrying. It does not save, reload, or discard your unsaved work. Once the check passes, it captures a before snapshot. After the edit, it refreshes Vim and records added, changed, and deleted regions in the change list. A conflict introduced while the tool was running is reported through the post-edit hook.
+
+Both hooks are silent no-ops when `VIMBIOSIS_SESSION` is unset. For external attachments, start Codex with `--no-daemon`; `:Vbio codex` adds that option automatically. Existing post-only setups still refresh, but can only mark the whole file without a before snapshot.
+
+These hooks cover direct `apply_patch` edits, not writes performed by shell commands or external formatters.
 
 To uninstall, remove these two skill links and only the matching hook tables from `config.toml`.

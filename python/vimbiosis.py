@@ -3,23 +3,18 @@
 import argparse
 import json
 import os
-import select
 import socket
 import sys
 import threading
 import uuid
+from changes import Snapshots
 
 
-def send_request(args):
+def send_payload(request):
     descriptor = os.environ.get("VIMBIOSIS_SESSION")
     if not descriptor:
         return {"ok": False, "error": "not attached (VIMBIOSIS_SESSION is unset)"}
     address, token = descriptor.rsplit(":", 1)
-    request = vars(args).copy()
-    request.pop("command", None)
-    request["op"] = args.command
-    if args.command == "notify":
-        request["files"] = args.files
     try:
         with socket.socket(socket.AF_UNIX) as client:
             client.settimeout(5)
@@ -28,6 +23,17 @@ def send_request(args):
             return json.loads(client.makefile().readline())
     except (OSError, ValueError) as exc:
         return {"ok": False, "error": "Vim bridge unavailable: " + str(exc)}
+
+
+def send_request(args):
+    request = vars(args).copy()
+    request["op"] = request.pop("command")
+    for name in ("path",):
+        if name in request:
+            request[name] = os.path.abspath(request[name])
+    if "files" in request:
+        request["files"] = [os.path.abspath(path) for path in request["files"]]
+    return send_payload(request)
 
 
 def bridge(args):
@@ -40,7 +46,9 @@ def bridge(args):
     os.chmod(args.socket, 0o600)
     server.listen()
     pending = {}
+    snapshots = Snapshots()
     lock = threading.Lock()
+    output_lock = threading.Lock()
 
     def client_loop(conn):
         with conn:
@@ -48,19 +56,33 @@ def bridge(args):
                 msg = json.loads(conn.makefile().readline())
                 if msg.get("token") != args.token:
                     return
+                request = msg["request"]
+                operation = request.get("op")
+                if operation == "notify":
+                    targets = request.get("targets", [{"path": p} for p in request["files"]])
+                    with lock:
+                        request["changes"] = snapshots.finish(request.get("hook_id", ""), targets)
                 key = uuid.uuid4().hex
                 event = threading.Event()
                 with lock:
                     pending[key] = [event, None]
-                print(json.dumps([0, {"id": key, "request": msg["request"]}]), flush=True)
+                with output_lock:
+                    print(json.dumps([0, {"id": key, "request": request}]), flush=True)
                 if event.wait(5):
-                    conn.sendall((json.dumps(pending[key][1]) + "\n").encode())
+                    result = pending[key][1]
+                    if operation == "before" and result.get("ok"):
+                        with lock:
+                            snapshots.capture(request.get("hook_id", ""), request["files"])
+                    conn.sendall((json.dumps(result) + "\n").encode())
                 else:
                     conn.sendall(b'{"ok":false,"error":"Vim request timed out"}\n')
                 with lock:
                     pending.pop(key, None)
-            except (OSError, ValueError, KeyError):
-                pass
+            except (OSError, ValueError, KeyError) as exc:
+                try:
+                    conn.sendall((json.dumps({"ok": False, "error": str(exc)}) + "\n").encode())
+                except OSError:
+                    pass
 
     def stdin_loop():
         while True:

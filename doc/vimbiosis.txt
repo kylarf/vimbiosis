@@ -13,6 +13,11 @@ COMMANDS                                                *vimbiosis-commands*
 :VbioStatus                       Show bridge status.
 :VbioDetach                       Stop the bridge and detach.
 :VbioFollow                       Toggle automatic file following.
+:VbioChanges                      Open the change location list.
+:VbioNext                         Jump to the next changed region.
+:VbioPrevious                     Jump to the previous changed region.
+:VbioClear                        Clear this buffer's change markers.
+:VbioChangesClear                 Clear the change list and all its markers.
 
 After :VbioAttach, evaluate the printed export command in the external
 agent's shell. The variable must be inherited when the agent starts.
@@ -25,7 +30,43 @@ vimbiosis read-buffer FILE [--start N --end M]
 vimbiosis open FILE [--line N --column N --vertical]
 vimbiosis notify FILE...
 
-Buffer reads return live contents, including unsaved edits. Writes to a
-modified buffer are reported as conflicts and are not silently reloaded.
+Buffer reads return live contents, including unsaved edits.
+
+CHANGE REVIEW                                           *vimbiosis-changes*
+
+Configure both PreToolUse and PostToolUse hooks using codex/INSTALL.md or
+claude/INSTALL.md. The pre-edit hook blocks direct edits to unsaved buffers,
+returning feedback that asks the agent to wait for your decision. Resolve
+the buffer in Vim before retrying. Checks cover the configured direct edit
+tools; shell commands and external writers are not intercepted.
+
+Successful pre-edit checks capture a before snapshot. After the tool finishes,
+the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
+modified lines with VimbiosisChanged (DiffChange), and marks deletions with
+a "-" gutter sign using VimbiosisDeleted (DiffDelete). Deleted text is not
+inserted into the buffer. Without a snapshot, only a whole-file change marker
+is available. Entirely deleted files remain in the list without opening an
+empty file buffer.
+
+Entering Insert mode clears all Vimbiosis highlights and signs in that buffer.
+Other buffers retain their markers. Change-list entries remain navigable;
+clearing markers does not remove them. A later edit replaces the previous
+regions for that file. :VbioChangesClear clears both the list and all markers.
+
+:VbioChanges opens a location list of changed regions across files. Select an
+entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file
+window, the standard :lnext, :lprevious, :lopen and :lclose commands also work.
+Each entry includes its file, line, kind of change, and added/deleted counts.
+
+Live follow shows the latest edited file and scrolls its owned viewer to the
+first changed region. Files visible in the current tab refresh in place. Every
+file remains in the change list even when subsequent edits replace the viewer's
+contents. :VbioFollow pauses/resumes automatic display of hidden files; visible
+buffers still refresh, and the change list still records edits.
+
+Customize VimbiosisAdded, VimbiosisChanged and VimbiosisDeleted highlight groups
+to suit your colorscheme. They do not alter the file contents or syntax rules.
+Older Vim builds without sign functions retain refresh and change-list support
+but omit the highlights and gutter markers.
 
  vim:tw=78:ts=8:noet:ft=help:norl:

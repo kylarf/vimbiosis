@@ -4,7 +4,7 @@ function! vimbiosis#start_bridge() abort
   endif
   let s:root = fnamemodify(expand('<sfile>:p'), ':h:h:h')
   let s:socket = tempname() . '.sock'
-  let s:token = printf('%x-%x-%x', localtime(), getpid(), reltimefloat(reltime()) * 1000000)
+  let s:token = printf('%x-%x-%s', localtime(), getpid(), fnamemodify(tempname(), ':t'))
   let l:cmd = [s:root . '/bin/vimbiosis', 'bridge', '--socket', s:socket, '--token', s:token]
   let g:vimbiosis_job = job_start(l:cmd, {
         \ 'in_mode': 'json', 'out_mode': 'json', 'err_mode': 'nl',

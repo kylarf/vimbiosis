@@ -1,6 +1,6 @@
 # Codex setup
 
-Set `VIMBIOSIS_ROOT` to the absolute path of this checkout. Add `$VIMBIOSIS_ROOT/bin` to `PATH` in the shell used to start Codex. For an attachment started from Vim, `:Agent codex` sets this path automatically. For an existing Vim, run `:AgentAttach` and evaluate its printed `VIMBIOSIS_SESSION` export in the shell before starting Codex.
+Set `VIMBIOSIS_ROOT` to the absolute path of this checkout. Add `$VIMBIOSIS_ROOT/bin` to `PATH` in the shell used to start Codex. For an attachment started from Vim, `:Vbio codex` sets this path automatically. For an existing Vim, run `:VbioAttach` and evaluate its printed `VIMBIOSIS_SESSION` export in the shell before starting Codex.
 
 ## Skills
 

@@ -111,6 +111,12 @@ function! vimbiosis#refresh(file) abort
     let l:buf = bufadd(l:path)
   endif
   call bufload(l:buf)
+  for l:win in l:wins
+    if l:win.tabnr == tabpagenr() && l:win.bufnr == l:buf
+      call win_execute(l:win.winid, 'silent keepalt edit')
+      return
+    endif
+  endfor
   if !exists('g:vimbiosis_live_win') || empty(getwininfo(g:vimbiosis_live_win))
     let g:vimbiosis_live_win = s:split(0)
   endif

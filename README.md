@@ -13,3 +13,7 @@ Configure both pre- and post-edit hooks using the setup guide for your agent. Pr
 Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and `:VbioPrevious` to navigate them. Entering Insert mode clears the current buffer's highlights and deletion signs while retaining the change list. `:VbioClear` clears the current buffer's markers manually; `:VbioChangesClear` clears the list and all its markers. See `:help vimbiosis-changes`.
 
 The review list opens automatically once it contains changes to multiple files, preserving your keyboard focus. Single-file changes do not automatically open the list.
+
+## License
+
+Vimbiosis is licensed under the GNU General Public License, version 3 or (at your option) any later version. See [LICENSE](LICENSE) for the full license text.

@@ -50,6 +50,7 @@ after = hook('PostToolUse')
             command = [sys.executable, str(probe), str(ROOT), tmp]
             boot.write_text("\n".join([
                 "set noswapfile",
+                "autocmd FileType qf wincmd J",
                 "set rtp^=" + str(ROOT),
                 "call vimbiosis#start_bridge()",
                 "call term_start(" + json.dumps(command) + ", {'env':",

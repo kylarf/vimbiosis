@@ -101,6 +101,21 @@ function! vimbiosis#changes#sync() abort
         \ 'idx': s:index, 'context': {'vimbiosis': 1}})
 endfunction
 
+function! vimbiosis#changes#show_if_multiple() abort
+  let l:files = uniq(sort(map(copy(s:entries), 'v:val.filename')))
+  if len(l:files) < 2 || empty(getwininfo(s:owner))
+    return
+  endif
+  let l:current = win_getid()
+  try
+    if win_gotoid(s:owner) && getloclist(0, {'winid': 0}).winid == 0
+      execute 'belowright lopen ' . min([5, len(s:entries)])
+    endif
+  finally
+    call win_gotoid(l:current)
+  endtry
+endfunction
+
 function! vimbiosis#changes#navigate(action) abort
   if empty(s:entries) || !win_gotoid(s:owner)
     echomsg 'No agent changes to review'

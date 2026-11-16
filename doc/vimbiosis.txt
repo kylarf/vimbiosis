@@ -57,6 +57,9 @@ regions for that file. :VbioChangesClear clears both the list and all markers.
 entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file
 window, the standard :lnext, :lprevious, :lopen and :lclose commands also work.
 Each entry includes its file, line, kind of change, and added/deleted counts.
+When the list contains changes to multiple files, it opens automatically after
+the edit batch finishes, without moving keyboard focus. Its initial height is
+at most five rows. An already open list is updated without resetting its size.
 
 Live follow shows the latest edited file and scrolls its owned viewer to the
 first changed region. Files visible in the current tab refresh in place. Every

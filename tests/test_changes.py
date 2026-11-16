@@ -53,6 +53,7 @@ class ChangeTests(unittest.TestCase):
                 "call assert_equal([fnamemodify(" + json.dumps(str(files[-1])) +
                 ", ':p')], uniq(sort(copy(g:entered))))",
                 "call assert_equal(3, len(getloclist(win_id2win(g:vimbiosis_live_win))))",
+                "call assert_true(getloclist(win_id2win(g:vimbiosis_live_win), {'winid': 0}).winid > 0)",
                 "call assert_equal(bufnr(" + json.dumps(str(files[-1])) +
                 "), getwininfo(g:vimbiosis_live_win)[0].bufnr)",
                 "VbioPrevious",
@@ -115,8 +116,10 @@ class ChangeTests(unittest.TestCase):
                 "VbioNext",
                 "let next_file = expand('%:p')",
                 "call win_gotoid(original)",
+                "let review_window = getloclist(win_id2win(g:vimbiosis_live_win), {'winid': 0}).winid",
                 "let state = {'before': before, 'after': after, 'other': other,",
                 "\\ 'entries': lists, 'focus': win_getid() == original,",
+                "\\ 'review_visible': review_window > 0,",
                 "\\ 'previous_file': previous_file, 'next_file': next_file,",
                 "\\ 'edited': getbufline(edited_buffer, 1, '$'),",
                 "\\ 'conflict': getbufline(bufnr(" + q(conflict) + "), 1, '$')}",
@@ -180,6 +183,7 @@ class ChangeTests(unittest.TestCase):
                 self.assertEqual(state["other"][0]["name"], "VimbiosisAdded")
                 self.assertEqual(len(state["entries"]), 2)
                 self.assertTrue(state["focus"])
+                self.assertTrue(state["review_visible"])
                 self.assertEqual(state["edited"], ["one", "three"])
                 self.assertEqual(state["conflict"], ["unsaved"])
                 self.assertEqual(Path(state["previous_file"]).resolve(), edited.resolve())

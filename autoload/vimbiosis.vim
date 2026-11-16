@@ -97,6 +97,7 @@ function! vimbiosis#dispatch(request) abort
             \ vimbiosis#refresh(l:change.path, l:index == l:last)
       call vimbiosis#changes#record(l:change, l:window)
     endfor
+    call vimbiosis#changes#show_if_multiple()
     return {'ok': empty(l:conflicts), 'conflicts': l:conflicts}
   endif
   return {'ok': v:false, 'error': 'unknown operation'}

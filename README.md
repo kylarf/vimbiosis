@@ -11,3 +11,5 @@ The bridge uses Vim's job and JSON channel callbacks. It requires Python 3 and a
 Configure both pre- and post-edit hooks using the setup guide for your agent. Pre-edit checks block direct edits when a Vim buffer contains unsaved work and ask the agent to wait for your decision. Passing checks capture a before snapshot so completed edits can highlight added/changed lines and mark deletions.
 
 Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and `:VbioPrevious` to navigate them. Entering Insert mode clears the current buffer's highlights and deletion signs while retaining the change list. `:VbioClear` clears the current buffer's markers manually; `:VbioChangesClear` clears the list and all its markers. See `:help vimbiosis-changes`.
+
+The review list opens automatically once it contains changes to multiple files, preserving your keyboard focus. Single-file changes do not automatically open the list.

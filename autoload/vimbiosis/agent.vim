@@ -3,6 +3,9 @@ function! vimbiosis#agent#start(args, mods) abort
   let l:parts = split(a:args)
   let l:agent = remove(l:parts, 0)
   if index(['codex', 'claude'], l:agent) < 0 | throw 'vimbiosis: agent must be codex or claude' | endif
+  if l:agent ==# 'codex' && index(l:parts, '--no-daemon') < 0
+    call insert(l:parts, '--no-daemon')
+  endif
   let l:env = {
         \ 'VIMBIOSIS_SESSION': g:vimbiosis_socket . ':' . g:vimbiosis_token,
         \ 'PATH': g:vimbiosis_root . '/bin:' . $PATH}
@@ -19,6 +22,7 @@ function! vimbiosis#agent#attach() abort
   call vimbiosis#start_bridge()
   let g:vimbiosis_anchor_win = win_getid()
   echomsg 'export VIMBIOSIS_SESSION=' . shellescape(g:vimbiosis_socket . ':' . g:vimbiosis_token)
+        \ . "\nFor Codex, launch with --no-daemon: codex --no-daemon"
 endfunction
 
 function! vimbiosis#agent#status() abort

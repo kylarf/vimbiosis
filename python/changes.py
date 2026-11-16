@@ -48,8 +48,8 @@ class Snapshots:
                 ranges = hunks(before[source], after)
             else:
                 # Post-only/manual notifications have no reliable before version.
-                ranges = [{"line": 1, "end_line": max(1, len(after)),
-                           "kind": "changed", "text": "File changed (no before snapshot)"}]
+                ranges = [{"line": 1, "end_line": 1,
+                           "kind": "unknown", "text": "File changed (no before snapshot)"}]
             deleted = not Path(path).exists()
             if deleted and not ranges:
                 ranges = [{"line": 1, "end_line": 1, "kind": "deleted",

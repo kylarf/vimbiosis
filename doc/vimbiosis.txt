@@ -44,9 +44,9 @@ Successful pre-edit checks capture a before snapshot. After the tool finishes,
 the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
 modified lines with VimbiosisChanged (DiffChange), and marks deletions with
 a "-" gutter sign using VimbiosisDeleted (DiffDelete). Deleted text is not
-inserted into the buffer. Without a snapshot, only a whole-file change marker
-is available. Entirely deleted files remain in the list without opening an
-empty file buffer.
+inserted into the buffer. Without a snapshot, a file-level list entry is
+recorded without highlights. Entirely deleted files remain in the list without
+opening an empty file buffer.
 
 Entering Insert mode clears all Vimbiosis highlights and signs in that buffer.
 Other buffers retain their markers. Change-list entries remain navigable;

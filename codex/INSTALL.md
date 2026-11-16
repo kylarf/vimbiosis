@@ -38,7 +38,7 @@ Replace `ABSOLUTE_PATH_TO_VIMBIOSIS` with this checkout's path. Merge these hook
 
 The same script handles both events. Before an edit, it checks all affected Vim buffers for unsaved text. A conflict blocks the tool and asks the agent to pause for your decision; save or reconcile the buffer in Vim before retrying. It does not save, reload, or discard your unsaved work. Once the check passes, it captures a before snapshot. After the edit, it refreshes Vim and records added, changed, and deleted regions in the change list. A conflict introduced while the tool was running is reported through the post-edit hook.
 
-Both hooks are silent no-ops when `VIMBIOSIS_SESSION` is unset. For external attachments, start Codex with `--no-daemon`; `:Vbio codex` adds that option automatically. Existing post-only setups still refresh, but can only mark the whole file without a before snapshot.
+Both hooks are silent no-ops when `VIMBIOSIS_SESSION` is unset. For external attachments, start Codex with `--no-daemon`; `:Vbio codex` adds that option automatically. Existing post-only setups still refresh and add a file-level change-list entry, but omit highlights because no before snapshot is available.
 
 These hooks cover direct `apply_patch` edits, not writes performed by shell commands or external formatters.
 

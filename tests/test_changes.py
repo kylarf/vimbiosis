@@ -9,7 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
-from changes import hunks
+from changes import hunks, Snapshots
 from hooks import targets
 
 
@@ -20,6 +20,52 @@ class ChangeTests(unittest.TestCase):
         self.assertEqual(hunks(["old"], ["new"])[0]["kind"], "changed")
         removed = hunks(["a", "b"], ["a"])[0]
         self.assertEqual((removed["kind"], removed["line"]), ("deleted", 1))
+
+    def test_missing_snapshot_does_not_claim_line_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "file.txt"
+            path.write_text("one\ntwo\nthree\n")
+            ranges = Snapshots().finish("missing", [{"path": str(path)}])[0]["hunks"]
+            self.assertEqual(ranges[0]["kind"], "unknown")
+            self.assertEqual(ranges[0]["end_line"], 1)
+
+    def test_batch_displays_only_the_last_hidden_file(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            directory = Path(tmp)
+            files = [directory / ("file" + str(i)) for i in range(3)]
+            for path in files:
+                path.write_text("new\n")
+            changes = [{"path": str(path), "hunks": [{
+                "line": 1, "end_line": 1, "kind": "changed", "text": "Changed"
+            }]} for path in files]
+            result = directory / "result"
+            script = "\n".join([
+                "set rtp^=" + str(ROOT),
+                "let original = win_getid()",
+                "let g:vimbiosis_anchor_win = original",
+                "let g:entered = []",
+                "runtime plugin/vimbiosis.vim",
+                "autocmd BufEnter * if exists('g:vimbiosis_live_win') && win_getid() == g:vimbiosis_live_win | call add(g:entered, expand('%:p')) | endif",
+                "let reply = vimbiosis#dispatch(" + json.dumps({
+                    "op": "notify", "changes": changes}) + ")",
+                "call assert_true(reply.ok)",
+                "call assert_equal(original, win_getid())",
+                "call assert_equal([fnamemodify(" + json.dumps(str(files[-1])) +
+                ", ':p')], uniq(sort(copy(g:entered))))",
+                "call assert_equal(3, len(getloclist(win_id2win(g:vimbiosis_live_win))))",
+                "call assert_equal(bufnr(" + json.dumps(str(files[-1])) +
+                "), getwininfo(g:vimbiosis_live_win)[0].bufnr)",
+                "VbioPrevious",
+                "call assert_equal(['new'], getline(1, '$'))",
+                "call assert_equal('VimbiosisChanged', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
+                "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
+                "qa!",
+            ])
+            run = subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", "/dev/stdin"],
+                input=script, text=True, capture_output=True, timeout=5)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(result.read_text()), [])
 
     def test_move_paths(self):
         result = targets("codex", {

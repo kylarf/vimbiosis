@@ -23,7 +23,12 @@ function! s:message(channel, message) abort
     return
   endif
   try
-    let l:result = vimbiosis#dispatch(l:m.request)
+    if get(l:m.request, 'op', '') ==# 'notify'
+      silent let l:result = vimbiosis#dispatch(l:m.request)
+      redraw
+    else
+      let l:result = vimbiosis#dispatch(l:m.request)
+    endif
   catch
     let l:result = {'ok': v:false, 'error': v:exception}
   endtry
@@ -73,14 +78,23 @@ function! vimbiosis#dispatch(request) abort
     let l:conflicts = []
     let l:changes = get(a:request, 'changes',
           \ map(copy(get(a:request, 'files', [])), '{"path": v:val, "hunks": []}'))
-    for l:change in l:changes
+    let l:last = -1
+    for l:index in range(len(l:changes))
+      let l:change = l:changes[l:index]
+      if !get(l:change, 'deleted', 0) && !getbufvar(bufnr(l:change.path), '&modified')
+        let l:last = l:index
+      endif
+    endfor
+    for l:index in range(len(l:changes))
+      let l:change = l:changes[l:index]
       let l:buf = bufnr(l:change.path)
       if l:buf >= 0 && getbufvar(l:buf, '&modified')
         call add(l:conflicts, {'path': l:change.path, 'bufnr': l:buf,
               \ 'changedtick': getbufvar(l:buf, 'changedtick')})
         continue
       endif
-      let l:window = get(l:change, 'deleted', 0) ? 0 : vimbiosis#refresh(l:change.path)
+      let l:window = get(l:change, 'deleted', 0) ? 0 :
+            \ vimbiosis#refresh(l:change.path, l:index == l:last)
       call vimbiosis#changes#record(l:change, l:window)
     endfor
     return {'ok': empty(l:conflicts), 'conflicts': l:conflicts}
@@ -119,7 +133,7 @@ function! vimbiosis#open(request) abort
   return {'ok': v:true, 'path': l:path, 'line': line('.')}
 endfunction
 
-function! vimbiosis#refresh(file) abort
+function! vimbiosis#refresh(file, ...) abort
   let l:path = fnamemodify(a:file, ':p')
   let l:buf = bufnr(l:path)
   if l:buf >= 0 && getbufvar(l:buf, '&modified')
@@ -131,16 +145,18 @@ function! vimbiosis#refresh(file) abort
   if l:buf < 0
     let l:buf = bufadd(l:path)
   endif
-  call bufload(l:buf)
   for l:win in getwininfo()
     if l:win.tabnr == tabpagenr() && l:win.bufnr == l:buf
       call win_execute(l:win.winid, 'silent keepalt edit')
       return l:win.winid
     endif
   endfor
-  if !get(g:, 'vimbiosis_follow', 1)
+  if !get(g:, 'vimbiosis_follow', 1) || !get(a:000, 0, 1)
+    call setbufvar(l:buf, 'vimbiosis_pending_reload', 1)
     return 0
   endif
+  call bufload(l:buf)
+  call setbufvar(l:buf, 'vimbiosis_pending_reload', 0)
   if !exists('g:vimbiosis_live_win') || empty(getwininfo(g:vimbiosis_live_win))
     let g:vimbiosis_live_win = s:split(0)
   endif

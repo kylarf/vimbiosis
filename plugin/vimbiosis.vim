@@ -16,5 +16,6 @@ command! VbioChangesClear call vimbiosis#changes#reset()
 
 augroup vimbiosis_changes
   autocmd!
+  autocmd BufWinEnter * call vimbiosis#changes#enter()
   autocmd InsertEnter * call vimbiosis#changes#clear(bufnr('%'))
 augroup END

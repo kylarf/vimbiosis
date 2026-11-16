@@ -16,9 +16,40 @@ function! vimbiosis#changes#clear(buffer) abort
   if exists('*sign_unplace')
     call sign_unplace('Vimbiosis', {'buffer': a:buffer})
   endif
+  call setbufvar(a:buffer, 'vimbiosis_hunks', [])
   if has_key(s:marked, a:buffer)
     call remove(s:marked, a:buffer)
   endif
+endfunction
+
+function! vimbiosis#changes#paint(buffer) abort
+  if !exists('*sign_place') || !bufloaded(a:buffer)
+    return
+  endif
+  call sign_unplace('Vimbiosis', {'buffer': a:buffer})
+  for l:hunk in getbufvar(a:buffer, 'vimbiosis_hunks', [])
+    if l:hunk.kind ==# 'unknown'
+      continue
+    endif
+    let l:kind = get({'added': 'Added', 'changed': 'Changed', 'deleted': 'Deleted'},
+          \ l:hunk.kind, 'Changed')
+    let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
+    for l:line in range(l:hunk.line, l:last)
+      call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, a:buffer,
+            \ {'lnum': l:line, 'priority': 20})
+    endfor
+  endfor
+endfunction
+
+function! vimbiosis#changes#enter() abort
+  if &modified
+    return
+  endif
+  if get(b:, 'vimbiosis_pending_reload', 0)
+    let b:vimbiosis_pending_reload = 0
+    silent keepalt edit
+  endif
+  call vimbiosis#changes#paint(bufnr('%'))
 endfunction
 
 function! vimbiosis#changes#record(change, window) abort
@@ -27,21 +58,17 @@ function! vimbiosis#changes#record(change, window) abort
   let l:buf = bufnr(l:path)
   if l:buf >= 0
     call vimbiosis#changes#clear(l:buf)
+    if !get(a:change, 'deleted', 0)
+      call setbufvar(l:buf, 'vimbiosis_hunks', a:change.hunks)
+      let s:marked[l:buf] = 1
+      if !getbufvar(l:buf, 'vimbiosis_pending_reload', 0)
+        call vimbiosis#changes#paint(l:buf)
+      endif
+    endif
   endif
   for l:hunk in a:change.hunks
     call add(s:entries, {'filename': l:path, 'lnum': l:hunk.line,
           \ 'end_lnum': l:hunk.end_line, 'col': 1, 'text': l:hunk.text})
-    if l:buf < 0 || get(a:change, 'deleted', 0) || !exists('*sign_place')
-      continue
-    endif
-    let l:kind = get({'added': 'Added', 'changed': 'Changed', 'deleted': 'Deleted'},
-          \ l:hunk.kind, 'Changed')
-    let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
-    for l:line in range(l:hunk.line, l:last)
-      call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, l:buf,
-            \ {'lnum': l:line, 'priority': 20})
-    endfor
-    let s:marked[l:buf] = 1
   endfor
   let s:index = empty(s:entries) ? 0 : max([1, len(s:entries) - len(a:change.hunks) + 1])
   let l:owner = get(g:, 'vimbiosis_live_win', 0)

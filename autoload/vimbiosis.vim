@@ -115,6 +115,7 @@ function! vimbiosis#refresh(file) abort
     let g:vimbiosis_live_win = s:split(0)
   endif
   call win_execute(g:vimbiosis_live_win, 'execute "buffer " . ' . l:buf)
+  call win_execute(g:vimbiosis_live_win, 'silent keepalt edit')
   call win_gotoid(l:current)
   return
 endfunction

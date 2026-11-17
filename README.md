@@ -8,7 +8,7 @@ Commands include `:VbioStatus`, `:VbioDetach`, and `:VbioFollow`. The `vimbiosis
 
 Consider adding an instruction to your local or global `AGENTS.md` or `CLAUDE.md` to use the `show-code` skill when you ask where code is or ask to see it. This encourages the agent to automatically show the relevant code directly in your Vim session when appropriate.
 
-Add an instruction to your global or project `AGENTS.md` to use the `workspace-context` skill when you ask about currently open files, unsaved edits, Vim state, or the attached workspace. For general repository questions, the agent can search the files first and consult live workspace context when it may affect the answer.
+Add an instruction to your global or project `AGENTS.md` to interpret “my workspace” or workspace-state questions as referring to the attached live editor session when Vimbiosis is active, and use the `workspace-context` skill to inspect it. This includes currently open files, unsaved edits, and Vim state. For general repository questions, the agent can search the files first and consult live workspace context when it may affect the answer.
 
 The bridge uses Vim's job and JSON channel callbacks. It requires Python 3 available as `python3` and a Vim built with `+job`, `+channel`, `+timers`, and `+json`; terminal launching also requires `+terminal`. Clients connect through TCP bound only to `127.0.0.1`, authenticated with a random per-session token, using the same transport on macOS, Linux, and Windows.
 

@@ -133,7 +133,7 @@ function! vimbiosis#dispatch(request) abort
     endfor
     return {'ok': empty(l:conflicts), 'conflicts': l:conflicts}
   elseif l:op ==# 'status'
-    return {'ok': v:true, 'attached': exists('$VIMBIOSIS_SESSION') && !empty($VIMBIOSIS_SESSION)}
+    return {'ok': v:true, 'attached': exists('g:vimbiosis_session') && !empty(g:vimbiosis_session)}
   elseif l:op ==# 'buffers'
     let l:items = []
     for l:b in getbufinfo({'buflisted': 1})

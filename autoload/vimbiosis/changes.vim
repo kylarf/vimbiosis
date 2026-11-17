@@ -13,6 +13,7 @@ if exists('*sign_define')
 endif
 
 function! vimbiosis#changes#clear(buffer) abort
+  call s:clear_properties(a:buffer)
   if exists('*sign_unplace')
     call sign_unplace('Vimbiosis', {'buffer': a:buffer})
   endif
@@ -22,12 +23,94 @@ function! vimbiosis#changes#clear(buffer) abort
   endif
 endfunction
 
+function! s:clear_properties(buffer) abort
+  if has('textprop') && bufloaded(a:buffer)
+    for l:type in ['VimbiosisRemoved', 'VimbiosisAddedMarker', 'VimbiosisAddedText',
+          \ 'VimbiosisAddedFill', 'VimbiosisDeletedMarker', 'VimbiosisChangedMarker']
+      if !empty(prop_type_get(l:type, {'bufnr': a:buffer}))
+        call prop_remove({'bufnr': a:buffer, 'type': l:type, 'all': 1}, 1,
+              \ len(getbufline(a:buffer, 1, '$')))
+      endif
+    endfor
+  endif
+endfunction
+
+function! s:text_width(buffer) abort
+  let l:windows = getwininfo()
+  call filter(l:windows, 'v:val.bufnr == a:buffer')
+  let l:width = &columns
+  if !empty(l:windows)
+    let l:window = l:windows[0]
+    for l:info in l:windows
+      if l:info.winid == win_getid()
+        let l:window = l:info
+        break
+      endif
+    endfor
+    let l:width = max([1, l:window.width - l:window.textoff])
+  endif
+  return l:width
+endfunction
+
+function! s:removed_text(buffer, text) abort
+  let l:text = a:text =~# '^\s' ? substitute(a:text, '^\s', '-', '') : '-' . a:text
+  " Virtual text highlights only its characters, including trailing spaces.
+  let l:width = s:text_width(a:buffer)
+  let l:rows = []
+  let l:row = ''
+  for l:character in split(l:text, '\zs')
+    " Vim renders control characters in virtual text as a single space.
+    let l:character = l:character =~# '[[:cntrl:]]' ? ' ' : l:character
+    if strdisplaywidth(l:row . l:character) > l:width && !empty(l:row)
+      call add(l:rows, l:row . repeat(' ', max([0, l:width - strdisplaywidth(l:row)])))
+      let l:row = ''
+    endif
+    let l:row .= l:character
+  endfor
+  call add(l:rows, l:row . repeat(' ', max([0, l:width - strdisplaywidth(l:row)])))
+  return l:rows
+endfunction
+
+function! vimbiosis#changes#resize() abort
+  for l:buffer in keys(copy(s:marked))
+    call vimbiosis#changes#paint(str2nr(l:buffer))
+  endfor
+endfunction
+
 function! vimbiosis#changes#paint(buffer) abort
+  call s:clear_properties(a:buffer)
   if !exists('*sign_place') || !bufloaded(a:buffer)
     return
   endif
   call sign_unplace('Vimbiosis', {'buffer': a:buffer})
+  let l:virtual = get(g:, 'vimbiosis_enable_virtual_text', 1)
+        \ && has('textprop') && has('patch-9.0.0438')
+  if l:virtual && empty(prop_type_get('VimbiosisRemoved', {'bufnr': a:buffer}))
+    call prop_type_add('VimbiosisRemoved', {'bufnr': a:buffer,
+          \ 'highlight': 'VimbiosisDeleted'})
+  endif
+  if l:virtual
+    for l:type in ['AddedMarker', 'AddedText', 'AddedFill', 'DeletedMarker']
+      if empty(prop_type_get('Vimbiosis' . l:type, {'bufnr': a:buffer}))
+        call prop_type_add('Vimbiosis' . l:type, {'bufnr': a:buffer,
+              \ 'highlight': l:type ==# 'DeletedMarker' ? 'VimbiosisDeleted' : 'VimbiosisAdded'})
+      endif
+    endfor
+  endif
   for l:hunk in getbufvar(a:buffer, 'vimbiosis_hunks', [])
+    if l:virtual && !empty(get(l:hunk, 'removed_lines', []))
+      for l:text in l:hunk.removed_lines
+        for l:row in s:removed_text(a:buffer, l:text)
+          call prop_add(l:hunk.line, 0, {'bufnr': a:buffer,
+                \ 'type': 'VimbiosisRemoved', 'text': l:row,
+                \ 'text_align': get(l:hunk, 'removed_placement', 'above'),
+                \ 'text_wrap': 'truncate'})
+        endfor
+      endfor
+      if l:hunk.kind ==# 'deleted'
+        continue
+      endif
+    endif
     if l:hunk.kind ==# 'unknown'
       continue
     endif
@@ -35,8 +118,26 @@ function! vimbiosis#changes#paint(buffer) abort
           \ l:hunk.kind, 'Changed')
     let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
     for l:line in range(l:hunk.line, l:last)
-      call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, a:buffer,
-            \ {'lnum': l:line, 'priority': 20})
+      if l:virtual
+        let l:added = l:kind !=# 'Deleted'
+        call prop_add(l:line, 1, {'bufnr': a:buffer,
+              \ 'type': l:added ? 'VimbiosisAddedMarker' : 'VimbiosisDeletedMarker',
+              \ 'text': l:added ? '+' : '-'})
+        if l:added
+          let l:text = getbufline(a:buffer, l:line)[0]
+          call prop_add(l:line, 1, {'bufnr': a:buffer, 'type': 'VimbiosisAddedText',
+                \ 'length': max([1, strlen(l:text)])})
+          let l:width = s:text_width(a:buffer)
+          let l:padding = (l:width - strdisplaywidth('+' . l:text) % l:width) % l:width
+          if l:padding > 0
+            call prop_add(l:line, 0, {'bufnr': a:buffer, 'type': 'VimbiosisAddedFill',
+                  \ 'text': repeat(' ', l:padding), 'text_wrap': 'truncate'})
+          endif
+        endif
+      else
+        call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, a:buffer,
+              \ {'lnum': l:line, 'priority': 20})
+      endif
     endfor
   endfor
 endfunction

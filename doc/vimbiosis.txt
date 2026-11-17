@@ -56,13 +56,28 @@ tools; shell commands and external writers are not intercepted.
 
 Successful pre-edit checks capture a before snapshot. After the tool finishes,
 the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
-modified lines with VimbiosisChanged (DiffChange), and marks deletions with
-a "-" gutter sign using VimbiosisDeleted (DiffDelete). Deleted text is not
-inserted into the buffer. Without a snapshot, a file-level list entry is
+replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
+followed by added lines using VimbiosisAdded. Deletions also use a virtual
+display of removed original lines.
+Added lines, including replacement text, have an inline "+" marker. Removed
+lines wrap and have an inline "-" marker, replacing the first character if it
+is whitespace and otherwise prepended without a space. They appear above the
+next surviving line (below the last line for end-of-file removals). Empty files
+use their empty first line as the anchor. Buffer text and modified state are
+unchanged. This requires +textprop and Vim patch 9.0.0438 or newer.
+Virtual-text mode uses addition/removal colors and does not open a sign gutter.
+Set g:vimbiosis_enable_virtual_text = 0 to use gutter signs instead: "+" for
+additions, "~" for modifications, and "-" for removals. Modified lines then use
+VimbiosisChanged (DiffChange), a third highlight color. With Vim's default
+signcolumn=auto, the gutter appears only while signs are present.
+The default is 1; changes take effect on the next repaint. Unsupported builds
+also use gutter signs. Notifications without removal data cannot display the
+original removed text.
+Without a snapshot, a file-level list entry is
 recorded without highlights. Entirely deleted files remain in the list without
 opening an empty file buffer.
 
-Entering Insert mode clears all Vimbiosis highlights and signs in that buffer.
+Entering Insert mode clears all Vimbiosis highlights, virtual text and signs in that buffer.
 Other buffers retain their markers. Change-list entries remain navigable;
 clearing markers does not remove them. A later edit replaces the previous
 regions for that file. :VbioChangesClear clears both the list and all markers.

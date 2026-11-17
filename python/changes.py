@@ -23,6 +23,9 @@ def hunks(before, after):
             "line": line, "end_line": max(line, d), "kind": kind,
             "text": "{} (+{}/-{} lines)".format(kind.capitalize(), d - c, b - a),
         })
+        if b > a:
+            result[-1].update(removed_lines=before[a:b],
+                              removed_placement="above" if c < len(after) else "below")
     return result
 
 

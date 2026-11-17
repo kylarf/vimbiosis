@@ -90,6 +90,16 @@ class ChangeTests(unittest.TestCase):
         removed = hunks(["a", "b"], ["a"])[0]
         self.assertEqual((removed["kind"], removed["line"]), ("deleted", 1))
 
+    def test_removal_payloads(self):
+        for before, after, lines, placement in [
+                (["a", "b", "c"], ["c"], ["a", "b"], "above"),
+                (["a", "b", "c"], ["a"], ["b", "c"], "below"),
+                (["a", "b"], [], ["a", "b"], "below"),
+                (["  old", "\told"], ["new"], ["  old", "\told"], "above")]:
+            change = hunks(before, after)[0]
+            self.assertEqual(change["removed_lines"], lines)
+            self.assertEqual(change["removed_placement"], placement)
+
     def test_missing_snapshot_does_not_claim_line_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "file.txt"
@@ -161,6 +171,7 @@ class ChangeTests(unittest.TestCase):
             q = lambda path: json.dumps(str(path))
             script = "\n".join([
                 "set hidden nomore",
+                "let g:vimbiosis_enable_virtual_text = 0",
                 "execute 'set rtp^=' . fnameescape(" + q(ROOT) + ")",
                 "runtime plugin/vimbiosis.vim",
                 "execute 'edit ' . fnameescape(" + q(conflict) + ")",

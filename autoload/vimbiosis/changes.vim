@@ -13,6 +13,7 @@ if exists('*sign_define')
 endif
 
 function! vimbiosis#changes#clear(buffer) abort
+  call s:clear_properties(a:buffer)
   if exists('*sign_unplace')
     call sign_unplace('Vimbiosis', {'buffer': a:buffer})
   endif
@@ -22,12 +23,38 @@ function! vimbiosis#changes#clear(buffer) abort
   endif
 endfunction
 
+function! s:clear_properties(buffer) abort
+  if has('textprop') && bufloaded(a:buffer)
+        \ && !empty(prop_type_get('VimbiosisRemoved', {'bufnr': a:buffer}))
+    call prop_remove({'bufnr': a:buffer, 'type': 'VimbiosisRemoved', 'all': 1}, 1,
+          \ len(getbufline(a:buffer, 1, '$')))
+  endif
+endfunction
+
 function! vimbiosis#changes#paint(buffer) abort
+  call s:clear_properties(a:buffer)
   if !exists('*sign_place') || !bufloaded(a:buffer)
     return
   endif
   call sign_unplace('Vimbiosis', {'buffer': a:buffer})
+  let l:virtual = get(g:, 'vimbiosis_enable_virtual_text', 1)
+        \ && has('textprop') && has('patch-9.0.0438')
+  if l:virtual && empty(prop_type_get('VimbiosisRemoved', {'bufnr': a:buffer}))
+    call prop_type_add('VimbiosisRemoved', {'bufnr': a:buffer,
+          \ 'highlight': 'VimbiosisDeleted'})
+  endif
   for l:hunk in getbufvar(a:buffer, 'vimbiosis_hunks', [])
+    if l:virtual && !empty(get(l:hunk, 'removed_lines', []))
+      for l:text in l:hunk.removed_lines
+        call prop_add(l:hunk.line, 0, {'bufnr': a:buffer,
+              \ 'type': 'VimbiosisRemoved', 'text': '- ' . l:text,
+              \ 'text_align': get(l:hunk, 'removed_placement', 'above'),
+              \ 'text_wrap': 'wrap'})
+      endfor
+      if l:hunk.kind ==# 'deleted'
+        continue
+      endif
+    endif
     if l:hunk.kind ==# 'unknown'
       continue
     endif

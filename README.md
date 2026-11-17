@@ -10,7 +10,7 @@ Consider adding an instruction to your local or global `AGENTS.md` or `CLAUDE.md
 
 The bridge uses Vim's job and JSON channel callbacks. It requires Python 3 available as `python3` and a Vim built with `+job`, `+channel`, `+timers`, and `+json`; terminal launching also requires `+terminal`. Clients connect through TCP bound only to `127.0.0.1`, authenticated with a random per-session token, using the same transport on macOS, Linux, and Windows.
 
-On Windows, use Git Bash with `vim`, `python3`, and the agent commands available on its PATH. The Bash entry point and agent launch commands are unchanged; both `:Vbio` terminal splits and `:VbioAttach` need validation on Windows. After upgrading from the Unix-socket bridge, restart the bridge with `:VbioDetach` followed by `:VbioAttach` (or `:Vbio codex` / `:Vbio claude`). For external agents, export the new session descriptor and restart the agent so it inherits it.
+On Windows, use Git Bash with `vim`, `python3`, and the agent commands available on its PATH. The Bash entry point and agent launch commands are the same across platforms.
 
 Configure both pre- and post-edit hooks using the setup guide for your agent. Pre-edit checks block direct edits when a Vim buffer contains unsaved work and ask the agent to wait for your decision. Passing checks capture a before snapshot so completed edits can highlight added/changed lines and mark deletions.
 

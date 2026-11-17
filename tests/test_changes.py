@@ -83,7 +83,7 @@ class ChangeTests(unittest.TestCase):
                 "call assert_equal(0, getwininfo(win_getid())[0].textoff)",
                 "let rows = map(range(1, 6), {_, row -> join(map(range(1, 40), {_, col -> screenstring(row, col)}), '')})",
                 "call assert_equal('-old', substitute(rows[0], ' *$', '', ''))",
-                "call assert_equal('- indented', substitute(rows[1], ' *$', '', ''))",
+                "call assert_equal('-  indented', substitute(rows[1], ' *$', '', ''))",
                 "call assert_equal('-', substitute(rows[2], ' *$', '', ''))",
                 "call assert_equal('-x' . repeat('y', 38), rows[3])",
                 "call assert_equal(repeat('y', 7), substitute(rows[4], ' *$', '', ''))",

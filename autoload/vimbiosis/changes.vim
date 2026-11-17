@@ -53,7 +53,7 @@ function! s:text_width(buffer) abort
 endfunction
 
 function! s:removed_text(buffer, text) abort
-  let l:text = a:text =~# '^\s' ? substitute(a:text, '^\s', '-', '') : '-' . a:text
+  let l:text = '-' . a:text
   " Virtual text highlights only its characters, including trailing spaces.
   let l:width = s:text_width(a:buffer)
   let l:rows = []

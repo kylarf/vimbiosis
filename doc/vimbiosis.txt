@@ -60,9 +60,9 @@ replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
 followed by added lines using VimbiosisAdded. Deletions also use a virtual
 display of removed original lines.
 Added lines, including replacement text, have an inline "+" marker. Removed
-lines wrap and have an inline "-" marker, replacing the first character if it
-is whitespace and otherwise prepended without a space. They appear above the
-next surviving line (below the last line for end-of-file removals). Empty files
+lines wrap and have an inline "-" marker. Markers are always prepended without
+an extra space, preserving the original indentation. Removed lines appear above
+the next surviving line (below the last line for end-of-file removals). Empty files
 use their empty first line as the anchor. Buffer text and modified state are
 unchanged. This requires +textprop and Vim patch 9.0.0438 or newer.
 Virtual-text mode uses addition/removal colors and does not open a sign gutter.

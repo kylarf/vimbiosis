@@ -19,4 +19,7 @@ augroup vimbiosis_changes
   autocmd!
   autocmd BufWinEnter * call vimbiosis#changes#enter()
   autocmd InsertEnter * call vimbiosis#changes#clear(bufnr('%'))
+  if exists('##WinResized')
+    autocmd WinResized * call vimbiosis#changes#resize()
+  endif
 augroup END

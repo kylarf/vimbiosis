@@ -15,7 +15,52 @@ from hooks import targets
 
 
 class ChangeTests(unittest.TestCase):
-    def test_replacements_use_added_signs_only_with_virtual_removals(self):
+    def test_virtual_removals_have_compact_markers_and_full_row_highlights(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = Path(tmp) / 'result'
+            boot = Path(tmp) / 'boot.vim'
+            boot.write_text('\n'.join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                "runtime plugin/vimbiosis.vim",
+                "execute 'file ' . fnameescape(" + json.dumps(str(Path(tmp) / 'target')) + ")",
+                "set columns=40 lines=20 signcolumn=yes nonumber norelativenumber",
+                "set laststatus=0 noshowmode noruler wrap nobreakindent showbreak=",
+                "highlight VimbiosisDeleted ctermbg=Red ctermfg=White",
+                "call setline(1, ['new', 'tail'])",
+                "let b:vimbiosis_hunks = [{'line': 1, 'end_line': 1, 'kind': 'changed', 'removed_lines': ['old', '  indented', '', 'x' . repeat('y', 45)]}]",
+                "call vimbiosis#changes#paint(bufnr('%'))",
+                "redraw!",
+                "let rows = map(range(1, 6), {_, row -> join(map(range(3, 40), {_, col -> screenstring(row, col)}), '')})",
+                "call assert_equal('-old', substitute(rows[0], ' *$', '', ''))",
+                "call assert_equal('- indented', substitute(rows[1], ' *$', '', ''))",
+                "call assert_equal('-', substitute(rows[2], ' *$', '', ''))",
+                "call assert_equal('-x' . repeat('y', 36), rows[3])",
+                "call assert_equal(repeat('y', 9), substitute(rows[4], ' *$', '', ''))",
+                "for row in range(1, 5)",
+                "  call assert_notequal(0, screenattr(row, 3))",
+                "  call assert_equal(screenattr(row, 3), screenattr(row, 40))",
+                "endfor",
+                "call assert_equal('VimbiosisAdded', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
+                "call assert_equal(['new', 'tail'], getline(1, '$'))",
+                "let b:vimbiosis_hunks[0].text = 'Changed'",
+                "call vimbiosis#changes#record({'path': expand('%:p'), 'hunks': copy(b:vimbiosis_hunks)}, 0)",
+                "set columns=60",
+                "doautocmd WinResized",
+                "redraw!",
+                "call assert_equal('-', screenstring(1, 3))",
+                "call assert_equal(' ', screenstring(1, 60))",
+                "call assert_equal(screenattr(1, 3), screenattr(1, 60))",
+                "call assert_equal(4, len(prop_list(1)))",
+                'call writefile([json_encode(v:errors)], ' + json.dumps(str(result)) + ')',
+                'qa!',
+            ]))
+            run = subprocess.run(
+                ['vim', '--not-a-term', '-Nu', 'NONE', '-i', 'NONE', '-n', '-S', str(boot)],
+                capture_output=True, text=True, timeout=5)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(result.read_text()), [])
+
+    def test_replacements_use_added_signs_when_virtual_text_is_enabled(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = Path(tmp) / "result"
             boot = Path(tmp) / "boot.vim"
@@ -35,7 +80,8 @@ class ChangeTests(unittest.TestCase):
                 "let g:vimbiosis_enable_virtual_text = 1",
                 "unlet b:vimbiosis_hunks[0].removed_lines",
                 "call vimbiosis#changes#paint(bufnr('%'))",
-                "call assert_equal(['VimbiosisChanged', 'VimbiosisChanged'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisAdded' : 'VimbiosisChanged'",
+                "call assert_equal([expected, expected], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
                 "call assert_equal(['new one', 'new two'], getline(1, '$'))",
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
                 "qa!",
@@ -223,7 +269,8 @@ class ChangeTests(unittest.TestCase):
                 "call assert_false(&autoread)",
                 "VbioPrevious",
                 "call assert_equal(['new'], getline(1, '$'))",
-                "call assert_equal('VimbiosisChanged', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
+                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisAdded' : 'VimbiosisChanged'",
+                "call assert_equal(expected, sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
                 "qa!",
             ])

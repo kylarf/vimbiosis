@@ -31,6 +31,43 @@ function! s:clear_properties(buffer) abort
   endif
 endfunction
 
+function! s:removed_text(buffer, text) abort
+  let l:text = a:text =~# '^\s' ? substitute(a:text, '^\s', '-', '') : '-' . a:text
+  " Virtual text highlights only its characters, including trailing spaces.
+  let l:windows = getwininfo()
+  call filter(l:windows, 'v:val.bufnr == a:buffer')
+  let l:width = &columns
+  if !empty(l:windows)
+    let l:window = l:windows[0]
+    for l:info in l:windows
+      if l:info.winid == win_getid()
+        let l:window = l:info
+        break
+      endif
+    endfor
+    let l:width = max([1, l:window.width - l:window.textoff])
+  endif
+  let l:rows = []
+  let l:row = ''
+  for l:character in split(l:text, '\zs')
+    " Vim renders control characters in virtual text as a single space.
+    let l:character = l:character =~# '[[:cntrl:]]' ? ' ' : l:character
+    if strdisplaywidth(l:row . l:character) > l:width && !empty(l:row)
+      call add(l:rows, l:row . repeat(' ', max([0, l:width - strdisplaywidth(l:row)])))
+      let l:row = ''
+    endif
+    let l:row .= l:character
+  endfor
+  call add(l:rows, l:row . repeat(' ', max([0, l:width - strdisplaywidth(l:row)])))
+  return l:rows
+endfunction
+
+function! vimbiosis#changes#resize() abort
+  for l:buffer in keys(copy(s:marked))
+    call vimbiosis#changes#paint(str2nr(l:buffer))
+  endfor
+endfunction
+
 function! vimbiosis#changes#paint(buffer) abort
   call s:clear_properties(a:buffer)
   if !exists('*sign_place') || !bufloaded(a:buffer)
@@ -46,10 +83,12 @@ function! vimbiosis#changes#paint(buffer) abort
   for l:hunk in getbufvar(a:buffer, 'vimbiosis_hunks', [])
     if l:virtual && !empty(get(l:hunk, 'removed_lines', []))
       for l:text in l:hunk.removed_lines
-        call prop_add(l:hunk.line, 0, {'bufnr': a:buffer,
-              \ 'type': 'VimbiosisRemoved', 'text': '- ' . l:text,
-              \ 'text_align': get(l:hunk, 'removed_placement', 'above'),
-              \ 'text_wrap': 'wrap'})
+        for l:row in s:removed_text(a:buffer, l:text)
+          call prop_add(l:hunk.line, 0, {'bufnr': a:buffer,
+                \ 'type': 'VimbiosisRemoved', 'text': l:row,
+                \ 'text_align': get(l:hunk, 'removed_placement', 'above'),
+                \ 'text_wrap': 'truncate'})
+        endfor
       endfor
       if l:hunk.kind ==# 'deleted'
         continue
@@ -61,7 +100,6 @@ function! vimbiosis#changes#paint(buffer) abort
     let l:kind = get({'added': 'Added', 'changed': 'Changed', 'deleted': 'Deleted'},
           \ l:hunk.kind, 'Changed')
     if l:virtual && l:hunk.kind ==# 'changed'
-          \ && !empty(get(l:hunk, 'removed_lines', []))
       let l:kind = 'Added'
     endif
     let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line

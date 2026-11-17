@@ -1,43 +1,87 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from changes import hunks, Snapshots
 from hooks import targets
-import vimbiosis
 
 
 class ChangeTests(unittest.TestCase):
-    def test_bridge_timeout_reaches_client(self):
-        with tempfile.TemporaryDirectory(prefix="vbio-timeout-", dir="/tmp") as tmp:
-            address = str(Path(tmp) / "bridge.sock")
-            code = ("import sys; sys.path.insert(0, " + repr(str(ROOT / "python")) +
-                    "); import vimbiosis; vimbiosis.VIM_REPLY_TIMEOUT = .1; vimbiosis.main()")
-            proc = subprocess.Popen(
-                [sys.executable, "-c", code, "bridge", "--socket", address, "--token", "test"],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            try:
-                deadline = time.monotonic() + 3
-                while not Path(address).exists() and time.monotonic() < deadline:
-                    time.sleep(.01)
-                self.assertTrue(Path(address).exists())
-                with mock.patch.dict(os.environ, {"VIMBIOSIS_SESSION": address + ":test"}):
-                    reply = vimbiosis.send_payload({"op": "status"})
-                self.assertEqual(reply, {"ok": False, "error": "Vim request timed out"})
-            finally:
-                proc.terminate()
-                proc.wait(timeout=3)
-                proc.stdin.close()
-                proc.stdout.close()
-                proc.stderr.close()
+    def test_bridge_startup_and_restart_from_installation_with_spaces(self):
+        with tempfile.TemporaryDirectory(prefix="vbio install ") as tmp:
+            directory = Path(tmp)
+            for name in ("autoload", "bin", "python"):
+                shutil.copytree(ROOT / name, directory / name,
+                                ignore=shutil.ignore_patterns("__pycache__"))
+            result = directory / "result"
+            boot = directory / "boot.vim"
+            boot.write_text("\n".join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(tmp) + ")",
+                "call vimbiosis#start_bridge()",
+                "let first = g:vimbiosis_session",
+                "call vimbiosis#start_bridge()",
+                "call assert_equal(first, g:vimbiosis_session)",
+                "call ch_close_in(job_getchannel(g:vimbiosis_job))",
+                "let deadline = reltime()",
+                "while exists('g:vimbiosis_session') && reltimefloat(reltime(deadline)) < 3",
+                "  sleep 10m",
+                "endwhile",
+                "call assert_false(exists('g:vimbiosis_session'))",
+                "call vimbiosis#start_bridge()",
+                "call assert_notequal(first, g:vimbiosis_session)",
+                "call vimbiosis#agent#detach()",
+                "call assert_false(exists('g:vimbiosis_session'))",
+                "call vimbiosis#start_bridge()",
+                "sleep 100m",
+                "call assert_true(exists('g:vimbiosis_session'))",
+                "call vimbiosis#agent#detach()",
+                "sleep 100m",
+                "call assert_equal(0, len(filter(timer_info(), 'string(v:val.callback) =~# \"drain\"')))",
+                "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
+                "qa!",
+            ]))
+            run = subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", str(boot)],
+                capture_output=True, text=True, timeout=10)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(result.read_text()), [])
+
+    def test_bridge_startup_failure_reports_stderr(self):
+        with tempfile.TemporaryDirectory(prefix="vbio failure ") as tmp:
+            directory = Path(tmp)
+            for name in ("autoload", "bin"):
+                shutil.copytree(ROOT / name, directory / name)
+            (directory / "python").mkdir()
+            (directory / "python/vimbiosis.py").write_text(
+                "import sys\nprint('bridge startup probe failed', file=sys.stderr)\nsys.exit(1)\n")
+            result = directory / "result"
+            boot = directory / "boot.vim"
+            boot.write_text("\n".join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(tmp) + ")",
+                "try",
+                "  call vimbiosis#start_bridge()",
+                "  call assert_report('expected startup failure')",
+                "catch",
+                "  call assert_match('bridge startup probe failed', v:exception)",
+                "endtry",
+                "call assert_false(exists('g:vimbiosis_session'))",
+                "call assert_equal(0, len(filter(timer_info(), 'string(v:val.callback) =~# \"drain\"')))",
+                "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
+                "qa!",
+            ]))
+            run = subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", str(boot)],
+                capture_output=True, text=True, timeout=8)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(result.read_text()), [])
 
     def test_ranges(self):
         self.assertEqual(hunks(["same"], ["same"]), [])
@@ -55,7 +99,7 @@ class ChangeTests(unittest.TestCase):
             self.assertEqual(ranges[0]["end_line"], 1)
 
     def test_batch_displays_only_the_last_hidden_file(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+        with tempfile.TemporaryDirectory(prefix="vbio test ") as tmp:
             directory = Path(tmp)
             files = [directory / ("file" + str(i)) for i in range(3)]
             for path in files:
@@ -65,7 +109,7 @@ class ChangeTests(unittest.TestCase):
             }]} for path in files]
             result = directory / "result"
             script = "\n".join([
-                "set rtp^=" + str(ROOT),
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
                 "let original = win_getid()",
                 "let g:vimbiosis_anchor_win = original",
                 "let g:entered = []",
@@ -90,20 +134,23 @@ class ChangeTests(unittest.TestCase):
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
                 "qa!",
             ])
+            boot = directory / "boot.vim"
+            boot.write_text(script)
             run = subprocess.run(
-                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", "/dev/stdin"],
-                input=script, text=True, capture_output=True, timeout=5)
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", str(boot)],
+                text=True, capture_output=True, timeout=5)
             self.assertEqual(run.returncode, 0, run.stderr)
             self.assertEqual(json.loads(result.read_text()), [])
 
     def test_move_paths(self):
         result = targets("codex", {
-            "cwd": "/tmp", "tool_input": {"command":
+            "cwd": str(ROOT), "tool_input": {"command":
                 "*** Update File: old.txt\n*** Move to: new.txt\n"}})
-        self.assertEqual(result, [{"path": "/tmp/new.txt", "source": "/tmp/old.txt"}])
+        self.assertEqual(result, [{"path": str(ROOT / "new.txt"),
+                                   "source": str(ROOT / "old.txt")}])
 
     def exercise_hooks(self, provider):
-        with tempfile.TemporaryDirectory(prefix="vimbiosis-test-", dir="/tmp") as tmp:
+        with tempfile.TemporaryDirectory(prefix="vimbiosis test ") as tmp:
             directory = Path(tmp)
             edited = directory / "edited.txt"
             added = directory / "added.txt"
@@ -114,16 +161,15 @@ class ChangeTests(unittest.TestCase):
             q = lambda path: json.dumps(str(path))
             script = "\n".join([
                 "set hidden nomore",
-                "set rtp^=" + str(ROOT),
+                "execute 'set rtp^=' . fnameescape(" + q(ROOT) + ")",
                 "runtime plugin/vimbiosis.vim",
-                "edit " + str(conflict),
+                "execute 'edit ' . fnameescape(" + q(conflict) + ")",
                 'call setline(1, "unsaved")',
-                "new " + str(edited),
+                "execute 'new ' . fnameescape(" + q(edited) + ")",
                 "let original = win_getid()",
                 "let g:vimbiosis_anchor_win = original",
                 "call vimbiosis#start_bridge()",
-                "sleep 100m",
-                'call writefile([g:vimbiosis_socket . ":" . g:vimbiosis_token], ' + q(ready) + ")",
+                'call writefile([g:vimbiosis_session], ' + q(ready) + ")",
                 "let deadline = reltime()",
                 "while !filereadable(" + q(done) + ") && reltimefloat(reltime(deadline)) < 15",
                 "  sleep 10m",
@@ -155,16 +201,17 @@ class ChangeTests(unittest.TestCase):
                 "let state.cleared = sign_getplaced(added_buffer, {'group': 'Vimbiosis'})[0].signs",
                 "call job_stop(g:vimbiosis_job)",
                 "sleep 100m",
+                "let state.detached = !exists('g:vimbiosis_session')",
                 "let state.remaining_pumps = len(filter(timer_info(), 'string(v:val.callback) =~# \"drain\"'))",
                 "call writefile([json_encode(state)], " + q(result) + ")",
                 "qa!",
             ])
+            boot = directory / "boot.vim"
+            boot.write_text(script)
             proc = subprocess.Popen(
-                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", "/dev/stdin"],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-S", str(boot)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True)
-            proc.stdin.write(script + "\n")
-            proc.stdin.close()
             try:
                 deadline = time.monotonic() + 5
                 while (not ready.exists() or not ready.read_text().strip()) and time.monotonic() < deadline:
@@ -220,6 +267,7 @@ class ChangeTests(unittest.TestCase):
                 self.assertEqual(Path(state["next_file"]).resolve(), added.resolve())
                 self.assertEqual(state["cleared"], [])
                 self.assertEqual(state["remaining_pumps"], 0)
+                self.assertTrue(state["detached"])
             finally:
                 if proc.poll() is None:
                     proc.terminate()

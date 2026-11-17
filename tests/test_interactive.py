@@ -1,25 +1,28 @@
 """Exercise a synchronous multi-file hook inside a real Vim terminal."""
-import fcntl
 import json
 import os
 from pathlib import Path
-import pty
 import select
 import shutil
 import signal
 import struct
 import sys
 import tempfile
-import termios
 import time
 import unittest
+
+if os.name != "nt":
+    import fcntl
+    import pty
+    import termios
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@unittest.skipIf(os.name == "nt", "requires Unix PTY support")
 class InteractiveTests(unittest.TestCase):
     def test_batch_hook_completes_without_keyboard_input(self):
-        with tempfile.TemporaryDirectory(prefix="vbio-terminal-", dir="/tmp") as tmp:
+        with tempfile.TemporaryDirectory(prefix="vbio terminal ") as tmp:
             directory = Path(tmp)
             done = directory / "done"
             probe = directory / "probe.py"
@@ -67,10 +70,10 @@ for key, paths, line, text in [
                 "set noswapfile",
                 "set noautoread hidden",
                 "autocmd FileType qf wincmd J",
-                "set rtp^=" + str(ROOT),
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
                 "call vimbiosis#start_bridge()",
                 "call term_start(" + json.dumps(command) + ", {'env':",
-                "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_socket . ':' . g:vimbiosis_token}})",
+                "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_session}})",
                 "let g:vimbiosis_anchor_win = win_getid()",
             ]))
             pid, fd = pty.fork()

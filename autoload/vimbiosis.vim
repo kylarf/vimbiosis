@@ -1,29 +1,49 @@
 let s:requests = []
 let s:pump = -1
 let s:draining = 0
+let s:errors = []
 
 function! vimbiosis#start_bridge() abort
   if exists('g:vimbiosis_job') && job_status(g:vimbiosis_job) ==# 'run'
-    return
+    if exists('g:vimbiosis_session')
+      return
+    endif
+    throw 'vimbiosis: bridge is still starting'
   endif
   let s:root = fnamemodify(expand('<script>:p'), ':h:h')
-  let s:socket = tempname() . '.sock'
-  let s:token = printf('%x-%x-%s', localtime(), getpid(), fnamemodify(tempname(), ':t'))
-  let l:cmd = [s:root . '/bin/vimbiosis', 'bridge', '--socket', s:socket, '--token', s:token]
+  unlet! g:vimbiosis_session
+  let s:errors = []
+  let s:requests = []
+  let l:cmd = [s:root . '/bin/vimbiosis', 'bridge']
   let g:vimbiosis_job = job_start(l:cmd, {
         \ 'in_mode': 'json', 'out_mode': 'json', 'err_mode': 'nl',
-        \ 'out_cb': function('s:message'), 'close_cb': function('s:closed')})
-  if job_status(g:vimbiosis_job) !=# 'run'
-    throw 'vimbiosis: failed to start bridge'
+        \ 'out_cb': function('s:message'), 'close_cb': function('s:closed'),
+        \ 'err_cb': function('s:error')})
+  let l:started = reltime()
+  while !exists('g:vimbiosis_session') && exists('g:vimbiosis_job')
+        \ && job_status(g:vimbiosis_job) ==# 'run'
+        \ && reltimefloat(reltime(l:started)) < 5
+    sleep 10m
+  endwhile
+  if !exists('g:vimbiosis_session')
+    if exists('g:vimbiosis_job')
+      call job_stop(g:vimbiosis_job)
+    endif
+    throw 'vimbiosis: bridge failed to become ready within five seconds'
+          \ . (empty(s:errors) ? '' : ': ' . join(s:errors, ' '))
   endif
-  let g:vimbiosis_socket = s:socket
-  let g:vimbiosis_token = s:token
   let g:vimbiosis_root = s:root
   if s:pump != -1
     call timer_stop(s:pump)
   endif
   let s:requests = []
   let s:pump = timer_start(50, function('s:drain'), {'repeat': -1})
+endfunction
+
+function! s:error(channel, message) abort
+  if exists('g:vimbiosis_job') && job_getchannel(g:vimbiosis_job) == a:channel
+    call add(s:errors, a:message)
+  endif
 endfunction
 
 function! s:trace(event, message) abort
@@ -39,8 +59,19 @@ function! s:trace(event, message) abort
 endfunction
 
 function! s:message(channel, message) abort
+  if !exists('g:vimbiosis_job') || job_getchannel(g:vimbiosis_job) != a:channel
+    return
+  endif
   let l:m = a:message
-  if type(l:m) != v:t_dict || !has_key(l:m, 'id') || !has_key(l:m, 'request')
+  if type(l:m) != v:t_dict
+    return
+  endif
+  if get(l:m, 'event', '') ==# 'ready'
+        \ && get(l:m, 'session', '') =~# '^\d\+:[0-9a-f]\{64}$'
+    let g:vimbiosis_session = l:m.session
+    return
+  endif
+  if !has_key(l:m, 'id') || !has_key(l:m, 'request')
     return
   endif
   call s:trace('queued', l:m)
@@ -86,7 +117,7 @@ function! s:closed(channel) abort
     let s:pump = -1
   endif
   let s:requests = []
-  unlet! g:vimbiosis_job
+  unlet! g:vimbiosis_job g:vimbiosis_session
 endfunction
 
 function! vimbiosis#dispatch(request) abort

@@ -15,6 +15,58 @@ from hooks import targets
 
 
 class ChangeTests(unittest.TestCase):
+    def test_blank_window_destinations(self):
+        scenarios = [
+            ([], True),
+            (["call setline(1, 'unsaved')"], False),
+            (["call setline(1, 'content')", "set nomodified"], False),
+            (["file named"], False),
+            (["setlocal buftype=nofile"], False),
+            (["tabnew", "file named"], False),
+        ]
+        for operation in ('open', 'refresh'):
+            for setup, reuse in scenarios:
+                with self.subTest(operation=operation, setup=setup), tempfile.TemporaryDirectory() as tmp:
+                    target = Path(tmp) / 'target.txt'
+                    target.write_text('one\ntwo\n')
+                    result = Path(tmp) / 'result'
+                    boot = Path(tmp) / 'boot.vim'
+                    path = json.dumps(str(target))
+                    action = (
+                        "call vimbiosis#open({'path': " + path + ", 'line': 2, 'vertical': v:true})"
+                        if operation == 'open' else
+                        'call vimbiosis#refresh(' + path + ')')
+                    script = [
+                        "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                        *setup,
+                        'let original = win_getid()',
+                        'let count_before = winnr("$")',
+                        action,
+                        'call assert_equal(count_before + ' + str(0 if reuse else 1) + ', winnr("$"))',
+                    ]
+                    if operation == 'open':
+                        script += ['call assert_equal(2, line("."))']
+                    else:
+                        script += [
+                            'call assert_equal(original, win_getid())',
+                            'let live = g:vimbiosis_live_win',
+                            'call vimbiosis#refresh(' + path + ')',
+                            'call assert_equal(live, g:vimbiosis_live_win)',
+                        ]
+                    if reuse:
+                        script += ['call assert_equal(original, ' +
+                                   ('win_getid()' if operation == 'open' else 'g:vimbiosis_live_win') + ')']
+                    script += [
+                        'call writefile([json_encode(v:errors)], ' + json.dumps(str(result)) + ')',
+                        'qa!',
+                    ]
+                    boot.write_text('\n'.join(script))
+                    run = subprocess.run(
+                        ['vim', '-Nu', 'NONE', '-i', 'NONE', '-n', '-es', '-S', str(boot)],
+                        capture_output=True, text=True, timeout=5)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    self.assertEqual(json.loads(result.read_text()), [])
+
     def test_bridge_startup_and_restart_from_installation_with_spaces(self):
         with tempfile.TemporaryDirectory(prefix="vbio install ") as tmp:
             directory = Path(tmp)
@@ -119,8 +171,8 @@ class ChangeTests(unittest.TestCase):
                     "op": "notify", "changes": changes}) + ")",
                 "call assert_true(reply.ok)",
                 "call assert_equal(original, win_getid())",
-                "call assert_equal([fnamemodify(" + json.dumps(str(files[-1])) +
-                ", ':p')], uniq(sort(copy(g:entered))))",
+                "call assert_equal([resolve(fnamemodify(" + json.dumps(str(files[-1])) +
+                ", ':p'))], uniq(sort(map(copy(g:entered), 'resolve(v:val)'))))",
                 "call assert_equal(3, len(getloclist(win_id2win(g:vimbiosis_live_win))))",
                 "call assert_true(getloclist(win_id2win(g:vimbiosis_live_win), {'winid': 0}).winid > 0)",
                 "call assert_equal(bufnr(" + json.dumps(str(files[-1])) +

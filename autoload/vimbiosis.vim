@@ -184,6 +184,25 @@ function! vimbiosis#dispatch(request) abort
   return {'ok': v:false, 'error': 'unknown operation'}
 endfunction
 
+function! s:destination(vertical) abort
+  let l:candidates = [win_getid(), get(g:, 'vimbiosis_anchor_win', 0)]
+  call extend(l:candidates, map(getwininfo(), 'v:val.winid'))
+  for l:id in l:candidates
+    let l:info = getwininfo(l:id)
+    if empty(l:info) || l:info[0].tabnr != tabpagenr() || get(l:info[0], 'popup', 0)
+      continue
+    endif
+    let l:buf = l:info[0].bufnr
+    if empty(bufname(l:buf)) && !getbufvar(l:buf, '&modified')
+          \ && empty(getbufvar(l:buf, '&buftype'))
+          \ && getbufline(l:buf, 1, '$') ==# ['']
+      call win_gotoid(l:id)
+      return l:id
+    endif
+  endfor
+  return s:split(a:vertical)
+endfunction
+
 function! s:split(vertical) abort
   call win_gotoid(get(g:, 'vimbiosis_anchor_win', win_getid()))
   let l:wide = winwidth(0) >= 2 * winheight(0)
@@ -207,7 +226,7 @@ function! vimbiosis#open(request) abort
   if l:win > 0
     call win_gotoid(l:win)
   else
-    call s:split(get(a:request, 'vertical', v:false))
+    call s:destination(get(a:request, 'vertical', v:false))
     execute 'edit ' . fnameescape(l:path)
   endif
   call cursor(max([1, get(a:request, 'line', 1)]), max([1, get(a:request, 'column', 1)]))
@@ -253,7 +272,7 @@ function! vimbiosis#refresh(file, ...) abort
   call bufload(l:buf)
   call setbufvar(l:buf, 'vimbiosis_pending_reload', 0)
   if !exists('g:vimbiosis_live_win') || empty(getwininfo(g:vimbiosis_live_win))
-    let g:vimbiosis_live_win = s:split(0)
+    let g:vimbiosis_live_win = s:destination(0)
   endif
   call s:reload(g:vimbiosis_live_win, l:buf)
   call win_gotoid(l:current)

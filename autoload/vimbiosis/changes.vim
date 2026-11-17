@@ -10,6 +10,7 @@ if exists('*sign_define')
   call sign_define('VimbiosisAdded', {'text': '+', 'linehl': 'VimbiosisAdded'})
   call sign_define('VimbiosisAddedLine', {'linehl': 'VimbiosisAdded'})
   call sign_define('VimbiosisChanged', {'text': '~', 'linehl': 'VimbiosisChanged'})
+  call sign_define('VimbiosisChangedLine', {'linehl': 'VimbiosisChanged'})
   call sign_define('VimbiosisDeleted', {'text': '-', 'texthl': 'VimbiosisDeleted'})
 endif
 
@@ -26,7 +27,7 @@ endfunction
 
 function! s:clear_properties(buffer) abort
   if has('textprop') && bufloaded(a:buffer)
-    for l:type in ['VimbiosisRemoved', 'VimbiosisAddedMarker']
+    for l:type in ['VimbiosisRemoved', 'VimbiosisAddedMarker', 'VimbiosisChangedMarker']
       if !empty(prop_type_get(l:type, {'bufnr': a:buffer}))
         call prop_remove({'bufnr': a:buffer, 'type': l:type, 'all': 1}, 1,
               \ len(getbufline(a:buffer, 1, '$')))
@@ -84,9 +85,13 @@ function! vimbiosis#changes#paint(buffer) abort
     call prop_type_add('VimbiosisRemoved', {'bufnr': a:buffer,
           \ 'highlight': 'VimbiosisDeleted'})
   endif
-  if l:virtual && empty(prop_type_get('VimbiosisAddedMarker', {'bufnr': a:buffer}))
-    call prop_type_add('VimbiosisAddedMarker', {'bufnr': a:buffer,
-          \ 'highlight': 'VimbiosisAdded'})
+  if l:virtual
+    for l:kind in ['Added', 'Changed']
+      if empty(prop_type_get('Vimbiosis' . l:kind . 'Marker', {'bufnr': a:buffer}))
+        call prop_type_add('Vimbiosis' . l:kind . 'Marker', {'bufnr': a:buffer,
+              \ 'highlight': 'Vimbiosis' . l:kind})
+      endif
+    endfor
   endif
   for l:hunk in getbufvar(a:buffer, 'vimbiosis_hunks', [])
     if l:virtual && !empty(get(l:hunk, 'removed_lines', []))
@@ -107,18 +112,16 @@ function! vimbiosis#changes#paint(buffer) abort
     endif
     let l:kind = get({'added': 'Added', 'changed': 'Changed', 'deleted': 'Deleted'},
           \ l:hunk.kind, 'Changed')
-    if l:virtual && l:hunk.kind ==# 'changed'
-      let l:kind = 'Added'
-    endif
     let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
     for l:line in range(l:hunk.line, l:last)
       let l:sign = 'Vimbiosis' . l:kind
-      if l:virtual && l:kind ==# 'Added'
+      if l:virtual && index(['Added', 'Changed'], l:kind) >= 0
         " Gutter signs appear on the first virtual row above a buffer line.
-        " An inline property keeps the marker on the actual added text.
-        let l:sign = 'VimbiosisAddedLine'
+        " An inline property keeps the marker on the actual buffer text.
+        let l:sign = 'Vimbiosis' . l:kind . 'Line'
         call prop_add(l:line, 1, {'bufnr': a:buffer,
-              \ 'type': 'VimbiosisAddedMarker', 'text': '+'})
+              \ 'type': 'Vimbiosis' . l:kind . 'Marker',
+              \ 'text': l:kind ==# 'Added' ? '+' : '~'})
       endif
       call sign_place(0, 'Vimbiosis', l:sign, a:buffer,
             \ {'lnum': l:line, 'priority': 20})

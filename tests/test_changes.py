@@ -37,13 +37,13 @@ class ChangeTests(unittest.TestCase):
                 "call assert_equal('-x' . repeat('y', 36), rows[3])",
                 "call assert_equal(repeat('y', 9), substitute(rows[4], ' *$', '', ''))",
                 "call assert_equal(' ', screenstring(1, 1))",
-                "call assert_equal('+', screenstring(6, 3))",
+                "call assert_equal('~', screenstring(6, 3))",
                 "call assert_equal('new', join(map(range(4, 6), {_, col -> screenstring(6, col)}), ''))",
                 "for row in range(1, 5)",
                 "  call assert_notequal(0, screenattr(row, 3))",
                 "  call assert_equal(screenattr(row, 3), screenattr(row, 40))",
                 "endfor",
-                "call assert_equal('VimbiosisAddedLine', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
+                "call assert_equal('VimbiosisChangedLine', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
                 "call assert_equal(['new', 'tail'], getline(1, '$'))",
                 "let b:vimbiosis_hunks[0].text = 'Changed'",
                 "call vimbiosis#changes#record({'path': expand('%:p'), 'hunks': copy(b:vimbiosis_hunks)}, 0)",
@@ -54,7 +54,7 @@ class ChangeTests(unittest.TestCase):
                 "call assert_equal(' ', screenstring(1, 60))",
                 "call assert_equal(screenattr(1, 3), screenattr(1, 60))",
                 "call assert_equal(5, len(prop_list(1)))",
-                "call assert_equal('+', screenstring(5, 3))",
+                "call assert_equal('~', screenstring(5, 3))",
                 "call vimbiosis#changes#clear(bufnr('%'))",
                 "redraw!",
                 "call assert_equal([], prop_list(1))",
@@ -68,7 +68,7 @@ class ChangeTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stderr)
             self.assertEqual(json.loads(result.read_text()), [])
 
-    def test_replacements_use_added_signs_when_virtual_text_is_enabled(self):
+    def test_replacements_use_changed_markers_with_and_without_virtual_text(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = Path(tmp) / "result"
             boot = Path(tmp) / "boot.vim"
@@ -78,7 +78,7 @@ class ChangeTests(unittest.TestCase):
                 "let b:vimbiosis_hunks = [{'line': 1, 'end_line': 2, 'kind': 'changed', 'removed_lines': ['old']}]",
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "if has('textprop') && has('patch-9.0.0438')",
-                "  call assert_equal(['VimbiosisAddedLine', 'VimbiosisAddedLine'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "  call assert_equal(['VimbiosisChangedLine', 'VimbiosisChangedLine'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
                 "  call assert_equal(2, len(prop_list(1)))",
                 "endif",
                 "let g:vimbiosis_enable_virtual_text = 0",
@@ -88,7 +88,7 @@ class ChangeTests(unittest.TestCase):
                 "let g:vimbiosis_enable_virtual_text = 1",
                 "unlet b:vimbiosis_hunks[0].removed_lines",
                 "call vimbiosis#changes#paint(bufnr('%'))",
-                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisAddedLine' : 'VimbiosisChanged'",
+                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisChangedLine' : 'VimbiosisChanged'",
                 "call assert_equal([expected, expected], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
                 "call assert_equal(['new one', 'new two'], getline(1, '$'))",
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
@@ -277,7 +277,7 @@ class ChangeTests(unittest.TestCase):
                 "call assert_false(&autoread)",
                 "VbioPrevious",
                 "call assert_equal(['new'], getline(1, '$'))",
-                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisAddedLine' : 'VimbiosisChanged'",
+                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisChangedLine' : 'VimbiosisChanged'",
                 "call assert_equal(expected, sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
                 "qa!",

@@ -14,7 +14,7 @@ ln -s "$VIMBIOSIS_ROOT/claude/skills/workspace-context" "$HOME/.claude/skills/vi
 
 Claude Code also supports project skills in `.claude/skills/` if you prefer to enable these only for one repository. Avoid replacing an existing skill with the same destination name.
 
-In your `CLAUDE.md`, add an instruction to use the `vimbiosis-show-code` skill when you ask where code is or ask to see it. This lets Claude Code open the relevant code in your Vim session when appropriate.
+In your global or project `CLAUDE.md`, add instructions to use the `vimbiosis-show-code` skill when you ask where code is or ask to see it, and the `vimbiosis-workspace-context` skill when you ask about currently open files, unsaved edits, Vim state, or the attached workspace. For general repository questions, Claude Code can search the files first and consult live workspace context when it may affect the answer. These let Claude Code open relevant code and inspect live editor state when appropriate.
 
 ## Edit hooks
 

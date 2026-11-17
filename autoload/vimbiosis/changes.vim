@@ -8,6 +8,7 @@ highlight default link VimbiosisChanged DiffChange
 highlight default link VimbiosisDeleted DiffDelete
 if exists('*sign_define')
   call sign_define('VimbiosisAdded', {'text': '+', 'linehl': 'VimbiosisAdded'})
+  call sign_define('VimbiosisAddedLine', {'linehl': 'VimbiosisAdded'})
   call sign_define('VimbiosisChanged', {'text': '~', 'linehl': 'VimbiosisChanged'})
   call sign_define('VimbiosisDeleted', {'text': '-', 'texthl': 'VimbiosisDeleted'})
 endif
@@ -25,9 +26,12 @@ endfunction
 
 function! s:clear_properties(buffer) abort
   if has('textprop') && bufloaded(a:buffer)
-        \ && !empty(prop_type_get('VimbiosisRemoved', {'bufnr': a:buffer}))
-    call prop_remove({'bufnr': a:buffer, 'type': 'VimbiosisRemoved', 'all': 1}, 1,
-          \ len(getbufline(a:buffer, 1, '$')))
+    for l:type in ['VimbiosisRemoved', 'VimbiosisAddedMarker']
+      if !empty(prop_type_get(l:type, {'bufnr': a:buffer}))
+        call prop_remove({'bufnr': a:buffer, 'type': l:type, 'all': 1}, 1,
+              \ len(getbufline(a:buffer, 1, '$')))
+      endif
+    endfor
   endif
 endfunction
 
@@ -80,6 +84,10 @@ function! vimbiosis#changes#paint(buffer) abort
     call prop_type_add('VimbiosisRemoved', {'bufnr': a:buffer,
           \ 'highlight': 'VimbiosisDeleted'})
   endif
+  if l:virtual && empty(prop_type_get('VimbiosisAddedMarker', {'bufnr': a:buffer}))
+    call prop_type_add('VimbiosisAddedMarker', {'bufnr': a:buffer,
+          \ 'highlight': 'VimbiosisAdded'})
+  endif
   for l:hunk in getbufvar(a:buffer, 'vimbiosis_hunks', [])
     if l:virtual && !empty(get(l:hunk, 'removed_lines', []))
       for l:text in l:hunk.removed_lines
@@ -104,7 +112,15 @@ function! vimbiosis#changes#paint(buffer) abort
     endif
     let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
     for l:line in range(l:hunk.line, l:last)
-      call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, a:buffer,
+      let l:sign = 'Vimbiosis' . l:kind
+      if l:virtual && l:kind ==# 'Added'
+        " Gutter signs appear on the first virtual row above a buffer line.
+        " An inline property keeps the marker on the actual added text.
+        let l:sign = 'VimbiosisAddedLine'
+        call prop_add(l:line, 1, {'bufnr': a:buffer,
+              \ 'type': 'VimbiosisAddedMarker', 'text': '+'})
+      endif
+      call sign_place(0, 'Vimbiosis', l:sign, a:buffer,
             \ {'lnum': l:line, 'priority': 20})
     endfor
   endfor

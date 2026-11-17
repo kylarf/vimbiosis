@@ -15,50 +15,47 @@ from hooks import targets
 
 
 class ChangeTests(unittest.TestCase):
-    def test_virtual_removals_have_compact_markers_and_full_row_highlights(self):
+    def test_marker_modes_and_automatic_gutter(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = Path(tmp) / 'result'
             boot = Path(tmp) / 'boot.vim'
             boot.write_text('\n'.join([
                 "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
-                "runtime plugin/vimbiosis.vim",
-                "execute 'file ' . fnameescape(" + json.dumps(str(Path(tmp) / 'target')) + ")",
-                "set columns=40 lines=20 signcolumn=yes nonumber norelativenumber",
-                "set laststatus=0 noshowmode noruler wrap nobreakindent showbreak=",
-                "highlight VimbiosisDeleted ctermbg=Red ctermfg=White",
-                "call setline(1, ['new', 'tail'])",
-                "let b:vimbiosis_hunks = [{'line': 1, 'end_line': 1, 'kind': 'changed', 'removed_lines': ['old', '  indented', '', 'x' . repeat('y', 45)]}]",
+                "set columns=40 lines=20 signcolumn=auto nonumber norelativenumber",
+                "set laststatus=0 noshowmode noruler",
+                "call setline(1, ['new', 'added', 'tail'])",
+                "let b:vimbiosis_hunks = [",
+                r"\ {'line': 1, 'end_line': 1, 'kind': 'changed', 'removed_lines': ['old']},",
+                r"\ {'line': 2, 'end_line': 2, 'kind': 'added'},",
+                r"\ {'line': 3, 'end_line': 3, 'kind': 'deleted', 'removed_lines': ['gone'], 'removed_placement': 'below'}]",
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",
-                "let rows = map(range(1, 6), {_, row -> join(map(range(3, 40), {_, col -> screenstring(row, col)}), '')})",
-                "call assert_equal('-old', substitute(rows[0], ' *$', '', ''))",
-                "call assert_equal('- indented', substitute(rows[1], ' *$', '', ''))",
-                "call assert_equal('-', substitute(rows[2], ' *$', '', ''))",
-                "call assert_equal('-x' . repeat('y', 36), rows[3])",
-                "call assert_equal(repeat('y', 9), substitute(rows[4], ' *$', '', ''))",
-                "call assert_equal(' ', screenstring(1, 1))",
-                "call assert_equal('~', screenstring(6, 3))",
-                "call assert_equal('new', join(map(range(4, 6), {_, col -> screenstring(6, col)}), ''))",
-                "for row in range(1, 5)",
-                "  call assert_notequal(0, screenattr(row, 3))",
-                "  call assert_equal(screenattr(row, 3), screenattr(row, 40))",
-                "endfor",
-                "call assert_equal('VimbiosisChangedLine', sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
-                "call assert_equal(['new', 'tail'], getline(1, '$'))",
-                "let b:vimbiosis_hunks[0].text = 'Changed'",
-                "call vimbiosis#changes#record({'path': expand('%:p'), 'hunks': copy(b:vimbiosis_hunks)}, 0)",
-                "set columns=60",
-                "doautocmd WinResized",
+                "call assert_equal(0, getwininfo(win_getid())[0].textoff)",
+                "call assert_equal(['-', '+', '+', 't', '-'], map(range(1, 5), {_, row -> screenstring(row, 1)}))",
+                "call assert_equal(screenattr(2, 1), screenattr(3, 1))",
+                "call assert_equal([], sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs)",
+                "let g:vimbiosis_enable_virtual_text = 0",
+                "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",
-                "call assert_equal('-', screenstring(1, 3))",
-                "call assert_equal(' ', screenstring(1, 60))",
-                "call assert_equal(screenattr(1, 3), screenattr(1, 60))",
-                "call assert_equal(5, len(prop_list(1)))",
-                "call assert_equal('~', screenstring(5, 3))",
+                "call assert_equal(2, getwininfo(win_getid())[0].textoff)",
+                "call assert_equal(['~', '+', '-'], map(range(1, 3), {_, row -> screenstring(row, 1)}))",
+                "call assert_equal(['n', 'a', 't'], map(range(1, 3), {_, row -> screenstring(row, 3)}))",
+                "call assert_equal([], prop_list(1, {'end_lnum': -1}))",
+                "call assert_equal(['VimbiosisChanged', 'VimbiosisAdded', 'VimbiosisDeleted'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "call assert_equal('VimbiosisChanged', sign_getdefined('VimbiosisChanged')[0].linehl)",
+                "call assert_notequal(screenattr(1, 3), screenattr(2, 3))",
+                "let g:vimbiosis_enable_virtual_text = 1",
+                "call vimbiosis#changes#paint(bufnr('%'))",
+                "redraw!",
+                "call assert_equal(0, getwininfo(win_getid())[0].textoff)",
+                "call assert_equal('+', screenstring(2, 1))",
+                "call assert_equal(screenattr(2, 1), screenattr(2, 40))",
                 "call vimbiosis#changes#clear(bufnr('%'))",
+                "let g:vimbiosis_enable_virtual_text = 0",
+                "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",
-                "call assert_equal([], prop_list(1))",
-                "call assert_equal('n', screenstring(1, 3))",
+                "call assert_equal(0, getwininfo(win_getid())[0].textoff)",
+                "call assert_equal(['new', 'added', 'tail'], getline(1, '$'))",
                 'call writefile([json_encode(v:errors)], ' + json.dumps(str(result)) + ')',
                 'qa!',
             ]))
@@ -68,7 +65,61 @@ class ChangeTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stderr)
             self.assertEqual(json.loads(result.read_text()), [])
 
-    def test_replacements_use_changed_markers_with_and_without_virtual_text(self):
+    def test_virtual_removals_have_compact_markers_and_full_row_highlights(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = Path(tmp) / 'result'
+            boot = Path(tmp) / 'boot.vim'
+            boot.write_text('\n'.join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                "runtime plugin/vimbiosis.vim",
+                "execute 'file ' . fnameescape(" + json.dumps(str(Path(tmp) / 'target')) + ")",
+                "set columns=40 lines=20 signcolumn=auto nonumber norelativenumber",
+                "set laststatus=0 noshowmode noruler wrap nobreakindent showbreak=",
+                "highlight VimbiosisDeleted ctermbg=Red ctermfg=White",
+                "call setline(1, ['new', 'tail'])",
+                "let b:vimbiosis_hunks = [{'line': 1, 'end_line': 1, 'kind': 'changed', 'removed_lines': ['old', '  indented', '', 'x' . repeat('y', 45)]}]",
+                "call vimbiosis#changes#paint(bufnr('%'))",
+                "redraw!",
+                "call assert_equal(0, getwininfo(win_getid())[0].textoff)",
+                "let rows = map(range(1, 6), {_, row -> join(map(range(1, 40), {_, col -> screenstring(row, col)}), '')})",
+                "call assert_equal('-old', substitute(rows[0], ' *$', '', ''))",
+                "call assert_equal('- indented', substitute(rows[1], ' *$', '', ''))",
+                "call assert_equal('-', substitute(rows[2], ' *$', '', ''))",
+                "call assert_equal('-x' . repeat('y', 38), rows[3])",
+                "call assert_equal(repeat('y', 7), substitute(rows[4], ' *$', '', ''))",
+                "call assert_equal('+', screenstring(6, 1))",
+                "call assert_equal('new', join(map(range(2, 4), {_, col -> screenstring(6, col)}), ''))",
+                "for row in range(1, 5)",
+                "  call assert_notequal(0, screenattr(row, 1))",
+                "  call assert_equal(screenattr(row, 1), screenattr(row, 40))",
+                "endfor",
+                "call assert_equal([], sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs)",
+                "call assert_equal(screenattr(6, 1), screenattr(6, 40))",
+                "call assert_equal(['new', 'tail'], getline(1, '$'))",
+                "let b:vimbiosis_hunks[0].text = 'Changed'",
+                "call vimbiosis#changes#record({'path': expand('%:p'), 'hunks': copy(b:vimbiosis_hunks)}, 0)",
+                "set columns=60",
+                "doautocmd WinResized",
+                "redraw!",
+                "call assert_equal('-', screenstring(1, 1))",
+                "call assert_equal(' ', screenstring(1, 60))",
+                "call assert_equal(screenattr(1, 1), screenattr(1, 60))",
+                "call assert_equal(7, len(prop_list(1)))",
+                "call assert_equal('+', screenstring(5, 1))",
+                "call vimbiosis#changes#clear(bufnr('%'))",
+                "redraw!",
+                "call assert_equal([], prop_list(1))",
+                "call assert_equal('n', screenstring(1, 1))",
+                'call writefile([json_encode(v:errors)], ' + json.dumps(str(result)) + ')',
+                'qa!',
+            ]))
+            run = subprocess.run(
+                ['vim', '--not-a-term', '-Nu', 'NONE', '-i', 'NONE', '-n', '-S', str(boot)],
+                capture_output=True, text=True, timeout=5)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(result.read_text()), [])
+
+    def test_replacements_use_inline_additions_or_gutter_modifications(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = Path(tmp) / "result"
             boot = Path(tmp) / "boot.vim"
@@ -78,8 +129,8 @@ class ChangeTests(unittest.TestCase):
                 "let b:vimbiosis_hunks = [{'line': 1, 'end_line': 2, 'kind': 'changed', 'removed_lines': ['old']}]",
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "if has('textprop') && has('patch-9.0.0438')",
-                "  call assert_equal(['VimbiosisChangedLine', 'VimbiosisChangedLine'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
-                "  call assert_equal(2, len(prop_list(1)))",
+                "  call assert_equal([], sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs)",
+                "  call assert_equal(4, len(prop_list(1)))",
                 "endif",
                 "let g:vimbiosis_enable_virtual_text = 0",
                 "call vimbiosis#changes#paint(bufnr('%'))",
@@ -88,8 +139,8 @@ class ChangeTests(unittest.TestCase):
                 "let g:vimbiosis_enable_virtual_text = 1",
                 "unlet b:vimbiosis_hunks[0].removed_lines",
                 "call vimbiosis#changes#paint(bufnr('%'))",
-                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisChangedLine' : 'VimbiosisChanged'",
-                "call assert_equal([expected, expected], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "let expected = has('textprop') && has('patch-9.0.0438') ? [] : ['VimbiosisChanged', 'VimbiosisChanged']",
+                "call assert_equal(expected, map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
                 "call assert_equal(['new one', 'new two'], getline(1, '$'))",
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
                 "qa!",
@@ -277,8 +328,8 @@ class ChangeTests(unittest.TestCase):
                 "call assert_false(&autoread)",
                 "VbioPrevious",
                 "call assert_equal(['new'], getline(1, '$'))",
-                "let expected = has('textprop') && has('patch-9.0.0438') ? 'VimbiosisChangedLine' : 'VimbiosisChanged'",
-                "call assert_equal(expected, sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs[0].name)",
+                "let expected = has('textprop') && has('patch-9.0.0438') ? [] : ['VimbiosisChanged']",
+                "call assert_equal(expected, map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
                 "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
                 "qa!",
             ])

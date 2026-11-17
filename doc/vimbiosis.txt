@@ -59,14 +59,20 @@ the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
 replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
 followed by added lines using VimbiosisAdded. Deletions also use a virtual
 display of removed original lines.
-Removed lines retain whitespace, wrap, and appear with a "- " prefix above the
+Added lines, including replacement text, have an inline "+" marker. Removed
+lines wrap and have an inline "-" marker, replacing the first character if it
+is whitespace and otherwise prepended without a space. They appear above the
 next surviving line (below the last line for end-of-file removals). Empty files
 use their empty first line as the anchor. Buffer text and modified state are
 unchanged. This requires +textprop and Vim patch 9.0.0438 or newer.
-Set g:vimbiosis_enable_virtual_text = 0 to use "-" gutter signs instead.
+Virtual-text mode uses addition/removal colors and does not open a sign gutter.
+Set g:vimbiosis_enable_virtual_text = 0 to use gutter signs instead: "+" for
+additions, "~" for modifications, and "-" for removals. Modified lines then use
+VimbiosisChanged (DiffChange), a third highlight color. With Vim's default
+signcolumn=auto, the gutter appears only while signs are present.
 The default is 1; changes take effect on the next repaint. Unsupported builds
-and notifications without removal data also use gutter signs. In these cases,
-modified lines use VimbiosisChanged (DiffChange).
+also use gutter signs. Notifications without removal data cannot display the
+original removed text.
 Without a snapshot, a file-level list entry is
 recorded without highlights. Entirely deleted files remain in the list without
 opening an empty file buffer.

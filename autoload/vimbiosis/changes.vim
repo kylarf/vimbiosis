@@ -8,9 +8,7 @@ highlight default link VimbiosisChanged DiffChange
 highlight default link VimbiosisDeleted DiffDelete
 if exists('*sign_define')
   call sign_define('VimbiosisAdded', {'text': '+', 'linehl': 'VimbiosisAdded'})
-  call sign_define('VimbiosisAddedLine', {'linehl': 'VimbiosisAdded'})
   call sign_define('VimbiosisChanged', {'text': '~', 'linehl': 'VimbiosisChanged'})
-  call sign_define('VimbiosisChangedLine', {'linehl': 'VimbiosisChanged'})
   call sign_define('VimbiosisDeleted', {'text': '-', 'texthl': 'VimbiosisDeleted'})
 endif
 
@@ -27,7 +25,8 @@ endfunction
 
 function! s:clear_properties(buffer) abort
   if has('textprop') && bufloaded(a:buffer)
-    for l:type in ['VimbiosisRemoved', 'VimbiosisAddedMarker', 'VimbiosisChangedMarker']
+    for l:type in ['VimbiosisRemoved', 'VimbiosisAddedMarker', 'VimbiosisAddedText',
+          \ 'VimbiosisAddedFill', 'VimbiosisDeletedMarker', 'VimbiosisChangedMarker']
       if !empty(prop_type_get(l:type, {'bufnr': a:buffer}))
         call prop_remove({'bufnr': a:buffer, 'type': l:type, 'all': 1}, 1,
               \ len(getbufline(a:buffer, 1, '$')))
@@ -36,9 +35,7 @@ function! s:clear_properties(buffer) abort
   endif
 endfunction
 
-function! s:removed_text(buffer, text) abort
-  let l:text = a:text =~# '^\s' ? substitute(a:text, '^\s', '-', '') : '-' . a:text
-  " Virtual text highlights only its characters, including trailing spaces.
+function! s:text_width(buffer) abort
   let l:windows = getwininfo()
   call filter(l:windows, 'v:val.bufnr == a:buffer')
   let l:width = &columns
@@ -52,6 +49,13 @@ function! s:removed_text(buffer, text) abort
     endfor
     let l:width = max([1, l:window.width - l:window.textoff])
   endif
+  return l:width
+endfunction
+
+function! s:removed_text(buffer, text) abort
+  let l:text = a:text =~# '^\s' ? substitute(a:text, '^\s', '-', '') : '-' . a:text
+  " Virtual text highlights only its characters, including trailing spaces.
+  let l:width = s:text_width(a:buffer)
   let l:rows = []
   let l:row = ''
   for l:character in split(l:text, '\zs')
@@ -86,10 +90,10 @@ function! vimbiosis#changes#paint(buffer) abort
           \ 'highlight': 'VimbiosisDeleted'})
   endif
   if l:virtual
-    for l:kind in ['Added', 'Changed']
-      if empty(prop_type_get('Vimbiosis' . l:kind . 'Marker', {'bufnr': a:buffer}))
-        call prop_type_add('Vimbiosis' . l:kind . 'Marker', {'bufnr': a:buffer,
-              \ 'highlight': 'Vimbiosis' . l:kind})
+    for l:type in ['AddedMarker', 'AddedText', 'AddedFill', 'DeletedMarker']
+      if empty(prop_type_get('Vimbiosis' . l:type, {'bufnr': a:buffer}))
+        call prop_type_add('Vimbiosis' . l:type, {'bufnr': a:buffer,
+              \ 'highlight': l:type ==# 'DeletedMarker' ? 'VimbiosisDeleted' : 'VimbiosisAdded'})
       endif
     endfor
   endif
@@ -114,17 +118,26 @@ function! vimbiosis#changes#paint(buffer) abort
           \ l:hunk.kind, 'Changed')
     let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
     for l:line in range(l:hunk.line, l:last)
-      let l:sign = 'Vimbiosis' . l:kind
-      if l:virtual && index(['Added', 'Changed'], l:kind) >= 0
-        " Gutter signs appear on the first virtual row above a buffer line.
-        " An inline property keeps the marker on the actual buffer text.
-        let l:sign = 'Vimbiosis' . l:kind . 'Line'
+      if l:virtual
+        let l:added = l:kind !=# 'Deleted'
         call prop_add(l:line, 1, {'bufnr': a:buffer,
-              \ 'type': 'Vimbiosis' . l:kind . 'Marker',
-              \ 'text': l:kind ==# 'Added' ? '+' : '~'})
+              \ 'type': l:added ? 'VimbiosisAddedMarker' : 'VimbiosisDeletedMarker',
+              \ 'text': l:added ? '+' : '-'})
+        if l:added
+          let l:text = getbufline(a:buffer, l:line)[0]
+          call prop_add(l:line, 1, {'bufnr': a:buffer, 'type': 'VimbiosisAddedText',
+                \ 'length': max([1, strlen(l:text)])})
+          let l:width = s:text_width(a:buffer)
+          let l:padding = (l:width - strdisplaywidth('+' . l:text) % l:width) % l:width
+          if l:padding > 0
+            call prop_add(l:line, 0, {'bufnr': a:buffer, 'type': 'VimbiosisAddedFill',
+                  \ 'text': repeat(' ', l:padding), 'text_wrap': 'truncate'})
+          endif
+        endif
+      else
+        call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, a:buffer,
+              \ {'lnum': l:line, 'priority': 20})
       endif
-      call sign_place(0, 'Vimbiosis', l:sign, a:buffer,
-            \ {'lnum': l:line, 'priority': 20})
     endfor
   endfor
 endfunction

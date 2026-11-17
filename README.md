@@ -18,7 +18,7 @@ Configure both pre- and post-edit hooks using the setup guide for your agent. Pr
 
 Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and `:VbioPrevious` to navigate them. Entering Insert mode clears the current buffer's highlights, virtual text and deletion signs while retaining the change list. `:VbioClear` clears the current buffer's markers manually; `:VbioChangesClear` clears the list and all its markers. See `:help vimbiosis-changes`.
 
-Removed original lines appear as wrapping virtual text with a `- ` prefix on Vim builds with `+textprop` and patch 9.0.0438 or newer. Set `let g:vimbiosis_enable_virtual_text = 0` in your vimrc to use deletion gutter signs. The default is `1`, read on each repaint. Unsupported builds and older notifications without removal data retain gutter signs. Virtual text never changes buffer contents; replacement updates and all marker-clearing commands remove it.
+Removed original lines appear as wrapping virtual text with a `- ` prefix on Vim builds with `+textprop` and patch 9.0.0438 or newer. Replacements display as deleted original lines followed by added lines. Set `let g:vimbiosis_enable_virtual_text = 0` in your vimrc to use deletion gutter signs. The default is `1`, read on each repaint. Unsupported builds and older notifications without removal data retain gutter signs and changed-line highlighting. Virtual text never changes buffer contents; replacement updates and all marker-clearing commands remove it.
 
 The review list opens automatically once it contains changes to multiple files, preserving your keyboard focus. Single-file changes do not automatically open the list.
 

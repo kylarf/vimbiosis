@@ -60,6 +60,10 @@ function! vimbiosis#changes#paint(buffer) abort
     endif
     let l:kind = get({'added': 'Added', 'changed': 'Changed', 'deleted': 'Deleted'},
           \ l:hunk.kind, 'Changed')
+    if l:virtual && l:hunk.kind ==# 'changed'
+          \ && !empty(get(l:hunk, 'removed_lines', []))
+      let l:kind = 'Added'
+    endif
     let l:last = l:hunk.kind ==# 'deleted' ? l:hunk.line : l:hunk.end_line
     for l:line in range(l:hunk.line, l:last)
       call sign_place(0, 'Vimbiosis', 'Vimbiosis' . l:kind, a:buffer,

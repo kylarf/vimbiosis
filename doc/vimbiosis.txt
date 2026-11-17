@@ -56,15 +56,17 @@ tools; shell commands and external writers are not intercepted.
 
 Successful pre-edit checks capture a before snapshot. After the tool finishes,
 the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
-modified lines with VimbiosisChanged (DiffChange), and marks deletions with
-a virtual display of removed original lines using VimbiosisDeleted (DiffDelete).
+replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
+followed by added lines using VimbiosisAdded. Deletions also use a virtual
+display of removed original lines.
 Removed lines retain whitespace, wrap, and appear with a "- " prefix above the
 next surviving line (below the last line for end-of-file removals). Empty files
 use their empty first line as the anchor. Buffer text and modified state are
 unchanged. This requires +textprop and Vim patch 9.0.0438 or newer.
 Set g:vimbiosis_enable_virtual_text = 0 to use "-" gutter signs instead.
 The default is 1; changes take effect on the next repaint. Unsupported builds
-and notifications without removal data also use gutter signs.
+and notifications without removal data also use gutter signs. In these cases,
+modified lines use VimbiosisChanged (DiffChange).
 Without a snapshot, a file-level list entry is
 recorded without highlights. Entirely deleted files remain in the list without
 opening an empty file buffer.

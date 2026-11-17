@@ -15,6 +15,37 @@ from hooks import targets
 
 
 class ChangeTests(unittest.TestCase):
+    def test_replacements_use_added_signs_only_with_virtual_removals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = Path(tmp) / "result"
+            boot = Path(tmp) / "boot.vim"
+            boot.write_text("\n".join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                "call setline(1, ['new one', 'new two'])",
+                "let b:vimbiosis_hunks = [{'line': 1, 'end_line': 2, 'kind': 'changed', 'removed_lines': ['old']}]",
+                "call vimbiosis#changes#paint(bufnr('%'))",
+                "if has('textprop') && has('patch-9.0.0438')",
+                "  call assert_equal(['VimbiosisAdded', 'VimbiosisAdded'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "  call assert_equal(1, len(prop_list(1)))",
+                "endif",
+                "let g:vimbiosis_enable_virtual_text = 0",
+                "call vimbiosis#changes#paint(bufnr('%'))",
+                "call assert_equal(['VimbiosisChanged', 'VimbiosisChanged'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "if has('textprop') | call assert_equal([], prop_list(1)) | endif",
+                "let g:vimbiosis_enable_virtual_text = 1",
+                "unlet b:vimbiosis_hunks[0].removed_lines",
+                "call vimbiosis#changes#paint(bufnr('%'))",
+                "call assert_equal(['VimbiosisChanged', 'VimbiosisChanged'], map(sign_getplaced(bufnr('%'), {'group': 'Vimbiosis'})[0].signs, 'v:val.name'))",
+                "call assert_equal(['new one', 'new two'], getline(1, '$'))",
+                "call writefile([json_encode(v:errors)], " + json.dumps(str(result)) + ")",
+                "qa!",
+            ]))
+            run = subprocess.run(
+                ['vim', '-Nu', 'NONE', '-i', 'NONE', '-n', '-es', '-S', str(boot)],
+                capture_output=True, text=True, timeout=5)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(result.read_text()), [])
+
     def test_bridge_startup_and_restart_from_installation_with_spaces(self):
         with tempfile.TemporaryDirectory(prefix="vbio install ") as tmp:
             directory = Path(tmp)

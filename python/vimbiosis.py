@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import secrets
 import socket
 import sys
 import threading
@@ -17,13 +18,16 @@ def send_payload(request):
     descriptor = os.environ.get("VIMBIOSIS_SESSION")
     if not descriptor:
         return {"ok": False, "error": "not attached (VIMBIOSIS_SESSION is unset)"}
-    address, token = descriptor.rsplit(":", 1)
     try:
-        with socket.socket(socket.AF_UNIX) as client:
+        port, token = descriptor.split(":")
+        if not token or not 0 < int(port) < 65536:
+            raise ValueError("invalid session descriptor; attach again")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
             client.settimeout(CLIENT_TIMEOUT)
-            client.connect(address)
+            client.connect(("127.0.0.1", int(port)))
             client.sendall((json.dumps({"token": token, "request": request}) + "\n").encode())
-            return json.loads(client.makefile().readline())
+            with client.makefile(encoding="utf-8") as stream:
+                return json.loads(stream.readline())
     except (OSError, ValueError) as exc:
         return {"ok": False, "error": "Vim bridge unavailable: " + str(exc)}
 
@@ -40,24 +44,26 @@ def send_request(args):
 
 
 def bridge(args):
-    try:
-        os.unlink(args.socket)
-    except FileNotFoundError:
-        pass
-    server = socket.socket(socket.AF_UNIX)
-    server.bind(args.socket)
-    os.chmod(args.socket, 0o600)
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
     server.listen()
+    server.settimeout(.2)
+    token = secrets.token_hex(32)
+    stopped = threading.Event()
     pending = {}
     snapshots = Snapshots()
     lock = threading.Lock()
     output_lock = threading.Lock()
 
     def client_loop(conn):
+        key = None
         with conn:
             try:
-                msg = json.loads(conn.makefile().readline())
-                if msg.get("token") != args.token:
+                conn.settimeout(CLIENT_TIMEOUT)
+                with conn.makefile(encoding="utf-8") as stream:
+                    msg = json.loads(stream.readline())
+                if not secrets.compare_digest(str(msg.get("token", "")), token):
+                    conn.sendall(b'{"ok":false,"error":"invalid session token"}\n')
                     return
                 request = msg["request"]
                 operation = request.get("op")
@@ -79,18 +85,20 @@ def bridge(args):
                     conn.sendall((json.dumps(result) + "\n").encode())
                 else:
                     conn.sendall(b'{"ok":false,"error":"Vim request timed out"}\n')
-                with lock:
-                    pending.pop(key, None)
-            except (OSError, ValueError, KeyError) as exc:
+            except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
                 try:
                     conn.sendall((json.dumps({"ok": False, "error": str(exc)}) + "\n").encode())
                 except OSError:
                     pass
+            finally:
+                with lock:
+                    pending.pop(key, None)
 
     def stdin_loop():
         while True:
             line = sys.stdin.readline()
             if not line:
+                stopped.set()
                 return
             try:
                 message = json.loads(line)
@@ -103,25 +111,24 @@ def bridge(args):
             except (ValueError, IndexError, AttributeError):
                 continue
 
-    threading.Thread(target=stdin_loop, daemon=True).start()
     try:
-        while True:
-            conn, _ = server.accept()
+        print(json.dumps([0, {"event": "ready", "session":
+                              str(server.getsockname()[1]) + ":" + token}]), flush=True)
+        threading.Thread(target=stdin_loop, daemon=True).start()
+        while not stopped.is_set():
+            try:
+                conn, _ = server.accept()
+            except socket.timeout:
+                continue
             threading.Thread(target=client_loop, args=(conn,), daemon=True).start()
     finally:
         server.close()
-        try:
-            os.unlink(args.socket)
-        except FileNotFoundError:
-            pass
 
 
 def main():
     parser = argparse.ArgumentParser(prog="vimbiosis")
     sub = parser.add_subparsers(dest="command", required=True)
-    b = sub.add_parser("bridge")
-    b.add_argument("--socket", required=True)
-    b.add_argument("--token", required=True)
+    sub.add_parser("bridge")
     for name in ("status", "buffers"):
         sub.add_parser(name)
     opened = sub.add_parser("open")

@@ -23,6 +23,19 @@ COMMANDS                                                *vimbiosis-commands*
 After :VbioAttach, evaluate the printed export command in the external
 agent's shell. The variable must be inherited when the agent starts.
 
+The bridge requires Python 3 available as python3. It listens on an OS-assigned
+TCP port bound only to 127.0.0.1 and authenticates requests using a random
+per-session token. VIMBIOSIS_SESSION contains <port>:<token>. Startup waits up
+to five seconds for the bridge to publish this descriptor before launching an
+agent or printing an attachment command. The bridge exits when Vim closes its
+input channel, and Vim clears the session when the bridge exits or detaches.
+
+The TCP transport is shared across macOS, Linux, and Windows. On Windows, run
+Vim from Git Bash with python3 and the agent commands on PATH. The Bash entry
+point and launch commands are unchanged; Windows launch validation is pending.
+After upgrading from the Unix-socket bridge, use :VbioDetach and start a new
+attachment. Export the new descriptor and restart external agents.
+
 CLI                                                     *vimbiosis-cli*
 
 vimbiosis status

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse/PostToolUse adapter."""
+"""Claude Code prompt and edit hook adapter."""
 from pathlib import Path
 import sys
 

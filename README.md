@@ -65,7 +65,8 @@ it.
 
 The review list opens automatically once it contains changes to multiple files,
 preserving your keyboard focus. Single-file changes do not automatically open
-the list.
+the list. Set `let g:vimbiosis_auto_open_changes = 0` in your vimrc to disable
+automatic opening.
 
 ## License
 

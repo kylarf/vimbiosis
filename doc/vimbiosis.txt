@@ -59,8 +59,8 @@ the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
 replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
 followed by added lines using VimbiosisAdded. Deletions also use a virtual
 display of removed original lines.
-Added lines, including replacement text, have an inline "+" marker. Removed
-lines wrap and have an inline "-" marker. Markers are always prepended without
+By default, added lines and replacement text have an inline "+" marker.
+Removed lines wrap and use "-" by default. Markers are always prepended without
 an extra space, preserving the original indentation. Removed lines appear above
 the next surviving line (below the last line for end-of-file removals). Empty files
 use their empty first line as the anchor. Buffer text and modified state are
@@ -70,9 +70,23 @@ Set g:vimbiosis_enable_virtual_text = 0 to use gutter signs instead: "+" for
 additions, "~" for modifications, and "-" for removals. Modified lines then use
 VimbiosisChanged (DiffChange), a third highlight color. With Vim's default
 signcolumn=auto, the gutter appears only while signs are present.
-The default is 1; changes take effect on the next repaint. Unsupported builds
-also use gutter signs. Notifications without removal data cannot display the
-original removed text.
+The default is 1. Unsupported builds also use gutter signs. Notifications
+without removal data cannot display the original removed text.
+
+Set these variables in your vimrc to customize the diff characters:
+>
+    let g:vimbiosis_diff_add_char = 'A'
+    let g:vimbiosis_diff_remove_char = 'R'
+    let g:vimbiosis_diff_change_char = 'C'
+    let g:vimbiosis_diff_padding_char = '.'
+<
+Each setting accepts one printable character that occupies one display cell.
+An unset or invalid setting uses the default. Add, remove, and padding
+default to "+", "-", and a space. The default change character matches the
+add character in virtual-text mode and is "~" in the gutter.
+Padding applies to the inline column on unmarked lines and to the fill at
+the end of highlighted virtual rows. Settings take effect on repaint.
+
 Without a snapshot, a file-level list entry is
 recorded without highlights. Entirely deleted files remain in the list without
 opening an empty file buffer.
@@ -93,6 +107,8 @@ installs no default keybindings. For example, add this to your vimrc:
 When the list contains changes to multiple files, it opens automatically after
 the edit batch finishes, without moving keyboard focus. Its initial height is
 at most five rows. An already open list is updated without resetting its size.
+Set `let g:vimbiosis_auto_open_changes = 0` in your vimrc to disable automatic
+opening. The default is 1. :VbioChanges still opens the list on demand.
 
 Live follow shows the latest edited file and scrolls its owned viewer to the
 first changed region. Files visible in the current tab refresh in place. Every

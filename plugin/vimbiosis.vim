@@ -3,6 +3,11 @@ if exists('g:loaded_vimbiosis')
 endif
 let g:loaded_vimbiosis = 1
 
+augroup vimbiosis_workspace
+  autocmd!
+  autocmd BufEnter,WinEnter,WinLeave * call vimbiosis#remember_window()
+augroup END
+
 command! -nargs=+ -complete=shellcmd Vbio call vimbiosis#agent#start(<q-args>, <q-mods>)
 command! VbioAttach call vimbiosis#agent#attach()
 command! VbioStatus call vimbiosis#agent#status()

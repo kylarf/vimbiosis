@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Codex PreToolUse/PostToolUse adapter."""
+"""Codex prompt and edit hook adapter."""
 from pathlib import Path
 import sys
 

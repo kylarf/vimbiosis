@@ -1,3 +1,14 @@
+function! s:launch_args(agent) abort
+  let l:url = 'http://127.0.0.1:' . split(g:vimbiosis_session, ':')[0] . '/mcp'
+  if a:agent ==# 'codex'
+    return ['-c', 'mcp_servers.vimbiosis.url=' . json_encode(l:url),
+          \ '-c', 'mcp_servers.vimbiosis.bearer_token_env_var="VIMBIOSIS_MCP_BEARER"']
+  endif
+  return ['--mcp-config', json_encode({'mcpServers': {'vimbiosis': {
+        \ 'type': 'http', 'url': l:url, 'alwaysLoad': v:true,
+        \ 'headers': {'Authorization': 'Bearer ${VIMBIOSIS_MCP_BEARER}'}}}})]
+endfunction
+
 function! vimbiosis#agent#start(args, mods) abort
   call vimbiosis#start_bridge()
   let l:parts = split(a:args)
@@ -8,9 +19,9 @@ function! vimbiosis#agent#start(args, mods) abort
   endif
   let l:env = {
         \ 'VIMBIOSIS_SESSION': g:vimbiosis_session,
-        \ 'PATH': g:vimbiosis_root . '/bin:' . $PATH}
+        \ 'VIMBIOSIS_MCP_BEARER': split(g:vimbiosis_session, ':')[1]}
   execute a:mods . ' new'
-  let l:buf = term_start([l:agent] + l:parts, {
+  let l:buf = term_start([l:agent] + s:launch_args(l:agent) + l:parts, {
         \ 'curwin': 1, 'env': l:env, 'term_name': 'Vimbiosis: ' . l:agent})
   if l:buf == 0
     throw 'vimbiosis: failed to start agent terminal'
@@ -22,7 +33,9 @@ function! vimbiosis#agent#attach() abort
   call vimbiosis#start_bridge()
   let g:vimbiosis_anchor_win = win_getid()
   echomsg 'export VIMBIOSIS_SESSION=' . shellescape(g:vimbiosis_session)
-        \ . "\nFor Codex, launch with --no-daemon: codex --no-daemon"
+        \ . "\n" . 'export VIMBIOSIS_MCP_BEARER="${VIMBIOSIS_SESSION#*:}"'
+        \ . "\nCodex: " . join(map(['codex', '--no-daemon'] + s:launch_args('codex'), 'shellescape(v:val)'))
+        \ . "\nClaude Code: " . join(map(['claude'] + s:launch_args('claude'), 'shellescape(v:val)'))
 endfunction
 
 function! vimbiosis#agent#status() abort

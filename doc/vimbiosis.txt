@@ -2,9 +2,8 @@
 
 VIMBIOSIS                                                *vimbiosis*
 
-Install this repository at pack/vendor/start/vimbiosis. Add its bin directory
-to PATH for external agent processes. The :Vbio command sets PATH for agent
-terminals it starts.
+Install this repository at pack/vendor/start/vimbiosis. :Vbio configures the
+Vim-owned MCP listener for the agent it starts.
 
 COMMANDS                                                *vimbiosis-commands*
 
@@ -20,8 +19,8 @@ COMMANDS                                                *vimbiosis-commands*
 :VbioClear                        Clear this buffer's change markers.
 :VbioChangesClear                 Clear the change list and all its markers.
 
-After :VbioAttach, evaluate the printed export command in the external
-agent's shell. The variable must be inherited when the agent starts.
+After :VbioAttach, use the printed exports and agent launch command in the
+external shell. The agent uses the per-session MCP configuration at startup.
 
 The bridge requires Python 3 available as python3. It listens on an OS-assigned
 TCP port bound only to 127.0.0.1 and authenticates requests using a random
@@ -30,21 +29,15 @@ to five seconds for the bridge to publish this descriptor before launching an
 agent or printing an attachment command. The bridge exits when Vim closes its
 input channel, and Vim clears the session when the bridge exits or detaches.
 
-The TCP transport is shared across macOS, Linux, and Windows. On Windows, run
-Vim from Git Bash with python3 and the agent commands on PATH. The Bash entry
-point and launch commands are unchanged; Windows launch validation is pending.
-After upgrading from the Unix-socket bridge, use :VbioDetach and start a new
-attachment. Export the new descriptor and restart external agents.
+On Windows, run Vim from Git Bash with python3 and the agent commands on PATH.
+After upgrading from the raw TCP bridge, restart Vim and the attached agent.
 
-CLI                                                     *vimbiosis-cli*
+MCP                                                     *vimbiosis-mcp*
 
-vimbiosis status
-vimbiosis buffers
-vimbiosis read-buffer FILE [--start N --end M]
-vimbiosis open FILE [--line N --column N --vertical]
-vimbiosis notify FILE...
-
-Buffer reads return live contents, including unsaved edits.
+Tools include workspace, read_buffer, open_file, and focus_window. Buffer reads
+return live contents, including unsaved edits. Set
+g:vimbiosis_allow_arbitrary_actions to 1 to enable execute_ex and send_keys.
+These actions run with Vim's local permissions.
 
 CHANGE REVIEW                                           *vimbiosis-changes*
 
@@ -54,7 +47,8 @@ returning feedback that asks the agent to wait for your decision. Resolve
 the buffer in Vim before retrying. Checks cover the configured direct edit
 tools; shell commands and external writers are not intercepted.
 
-Successful pre-edit checks capture a before snapshot. After the tool finishes,
+The prompt hook resets the baseline. The first successful pre-edit check
+for each file saves its disk contents for the rest of the prompt. After each edit,
 the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
 replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
 followed by added lines using VimbiosisAdded. Deletions also use a virtual
@@ -84,8 +78,9 @@ Each setting accepts one printable character that occupies one display cell.
 An unset or invalid setting uses the default. Add, remove, and padding
 default to "+", "-", and a space. The default change character matches the
 add character in virtual-text mode and is "~" in the gutter.
-Padding applies to the inline column on unmarked lines and to the fill at
-the end of highlighted virtual rows. Settings take effect on repaint.
+The padding character occupies the first display cell on unmarked lines.
+Highlighted virtual rows use spaces after the text. Settings take effect on
+repaint.
 
 Without a snapshot, a file-level list entry is
 recorded without highlights. Entirely deleted files remain in the list without
@@ -93,8 +88,9 @@ opening an empty file buffer.
 
 Entering Insert mode clears all Vimbiosis highlights, virtual text and signs in that buffer.
 Other buffers retain their markers. Change-list entries remain navigable;
-clearing markers does not remove them. A later edit replaces the previous
-regions for that file. :VbioChangesClear clears both the list and all markers.
+clearing markers does not remove them. Each later edit replaces the displayed
+regions with the cumulative diff for that file. Returning to the baseline
+clears the file's review entries. :VbioChangesClear clears the list and markers.
 
 :VbioChanges opens a location list of changed regions across files. Select an
 entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file
@@ -125,8 +121,8 @@ DIAGNOSTICS                                             *vimbiosis-diagnostics*
 
 Bridge requests are queued by the channel callback and processed by a 50ms
 timer, including while Vim is idle in a terminal. The timer stops when the
-bridge closes. Editor requests have a five-second bridge deadline; the CLI
-waits longer so it can receive and report that timeout rather than racing it.
+bridge closes. Editor requests have a five-second bridge deadline. The prompt
+hook uses a shorter timeout so an unavailable editor does not block a turn.
 
 When refreshing a clean buffer, Vimbiosis temporarily enables that buffer's
 'autoread' while switching to it and reloading. Otherwise Vim can wait for an

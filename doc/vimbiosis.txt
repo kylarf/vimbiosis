@@ -77,8 +77,9 @@ Each setting accepts one printable character that occupies one display cell.
 An unset or invalid setting uses the default. Add, remove, and padding
 default to "+", "-", and a space. The default change character matches the
 add character in virtual-text mode and is "~" in the gutter.
-Padding applies to the inline column on unmarked lines and to the fill at
-the end of highlighted virtual rows. Settings take effect on repaint.
+The padding character occupies the first display cell on unmarked lines.
+Highlighted virtual rows use spaces after the text. Settings take effect on
+repaint.
 
 Without a snapshot, a file-level list entry is
 recorded without highlights. Entirely deleted files remain in the list without

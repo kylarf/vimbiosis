@@ -58,7 +58,7 @@ class ChangeTests(unittest.TestCase):
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",
                 "call assert_equal(['R', 'C', 'A', '.', 'R'], map(range(1, 5), {_, row -> screenstring(row, 1)}))",
-                "call assert_equal(['.', '.', '.'], map(range(1, 3), {_, row -> screenstring(row, 40)}))",
+                "call assert_equal(repeat([' '], 5), map(range(1, 5), {_, row -> screenstring(row, 40)}))",
                 "let g:vimbiosis_enable_virtual_text = 0",
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",

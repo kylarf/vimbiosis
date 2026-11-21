@@ -8,7 +8,7 @@ def read_lines(path):
     try:
         return Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     except FileNotFoundError:
-        return []
+        return None
 
 
 def hunks(before, after):
@@ -32,33 +32,46 @@ def hunks(before, after):
 class Snapshots:
     def __init__(self):
         self.pending = {}
+        self.prompts = {}
 
-    def capture(self, key, files):
+    def reset(self, session):
+        self.prompts[session] = {}
+
+    def capture(self, key, files, session="", baseline=None):
         now = time.monotonic()
         self.pending = {k: v for k, v in self.pending.items() if now - v[0] < 600}
         if len(self.pending) >= 64:
             self.pending.pop(next(iter(self.pending)))
-        self.pending[key] = (now, {path: read_lines(path) for path in files})
+        before = {} if baseline is None else baseline
+        for path in files:
+            if path not in before:
+                before[path] = read_lines(path)
+        self.pending[session, key] = (now, baseline, {path: before[path] for path in files})
 
-    def finish(self, key, targets):
-        _, before = self.pending.pop(key, (0, {}))
+    def finish(self, key, targets, session=""):
+        captured, baseline, before = self.pending.pop((session, key), (None, None, {}))
+        if captured is not None and baseline is not self.prompts.get(session):
+            return []
         changes = []
         for target in targets:
             path = target["path"]
             after = read_lines(path)
             source = target.get("source", path)
             if source in before:
-                ranges = hunks(before[source], after)
+                ranges = hunks(before[source] or [], after or [])
             else:
                 # Post-only/manual notifications have no reliable before version.
                 ranges = [{"line": 1, "end_line": 1,
                            "kind": "unknown", "text": "File changed (no before snapshot)"}]
-            deleted = not Path(path).exists()
-            if deleted and not ranges:
+            deleted = after is None
+            if deleted and not ranges and before[source] is not None:
                 ranges = [{"line": 1, "end_line": 1, "kind": "deleted",
                            "text": "File deleted"}]
             elif source != path and not ranges:
                 ranges = [{"line": 1, "end_line": 1, "kind": "changed",
                            "text": "File moved from " + source}]
+            if source != path and source in before and baseline is not None and not deleted:
+                baseline[path] = before[source]
+                changes.append({"path": source, "hunks": [], "deleted": True})
             changes.append({"path": path, "hunks": ranges, "deleted": deleted})
         return changes

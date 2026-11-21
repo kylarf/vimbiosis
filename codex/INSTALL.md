@@ -9,6 +9,9 @@ agent instructions. Restart Vim and the agent to switch to HTTP.
 
 ## Prompt and edit hooks
 
+The prompt hook resets the diff baseline. Each file's first successful pre-edit
+check saves its disk contents for cumulative diffs within that prompt.
+
 Append this TOML to `~/.codex/config.toml`:
 
 ```toml

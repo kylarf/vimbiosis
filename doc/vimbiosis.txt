@@ -47,7 +47,8 @@ returning feedback that asks the agent to wait for your decision. Resolve
 the buffer in Vim before retrying. Checks cover the configured direct edit
 tools; shell commands and external writers are not intercepted.
 
-Successful pre-edit checks capture a before snapshot. After the tool finishes,
+The prompt hook resets the baseline. The first successful pre-edit check
+for each file saves its disk contents for the rest of the prompt. After each edit,
 the viewer highlights added lines with VimbiosisAdded (linked to DiffAdd),
 replacements as deleted original lines using VimbiosisDeleted (DiffDelete)
 followed by added lines using VimbiosisAdded. Deletions also use a virtual
@@ -87,8 +88,9 @@ opening an empty file buffer.
 
 Entering Insert mode clears all Vimbiosis highlights, virtual text and signs in that buffer.
 Other buffers retain their markers. Change-list entries remain navigable;
-clearing markers does not remove them. A later edit replaces the previous
-regions for that file. :VbioChangesClear clears both the list and all markers.
+clearing markers does not remove them. Each later edit replaces the displayed
+regions with the cumulative diff for that file. Returning to the baseline
+clears the file's review entries. :VbioChangesClear clears the list and markers.
 
 :VbioChanges opens a location list of changed regions across files. Select an
 entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file

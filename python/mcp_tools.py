@@ -46,11 +46,14 @@ HOOK_TOOLS = {name: {
     "inputSchema": {"type": "object", "required": ["files"], "additionalProperties": False,
                     "properties": {"files": {"type": "array", "items": {"type": "string"}},
                                    "targets": {"type": "array", "items": {"type": "object"}},
+                                   "session": {"type": "string"},
                                    "hook_id": {"type": "string"}}},
 } for name, description in (
     ("before", "Check affected Vim buffers and capture a pre-edit snapshot."),
     ("notify", "Refresh affected Vim buffers and record a completed edit."),
 )}
+HOOK_TOOLS["prompt"] = tool("prompt", "Reset the prompt baseline and inspect Vim.",
+                            {"session": PATH}, ("session",))
 
 
 def valid_arguments(schema, arguments):
@@ -70,10 +73,11 @@ def valid_arguments(schema, arguments):
 
 
 def valid_hook_arguments(arguments):
-    return (isinstance(arguments, dict) and arguments.keys() <= {"files", "targets", "hook_id"}
+    return (isinstance(arguments, dict) and arguments.keys() <= {"files", "targets", "hook_id", "session"}
             and isinstance(arguments.get("files"), list)
             and all(isinstance(path, str) for path in arguments["files"])
             and isinstance(arguments.get("hook_id", ""), str)
+            and isinstance(arguments.get("session", ""), str)
             and isinstance(arguments.get("targets", []), list)
             and all(isinstance(target, dict) and isinstance(target.get("path"), str)
                     and isinstance(target.get("source", ""), str)
@@ -114,7 +118,7 @@ def rpc(message, dispatch, hooks=False):
         arguments = params.get("arguments", {})
         if not isinstance(name, str) or name not in tools:
             return error(-32602, "Unknown Vim tool")
-        valid = valid_hook_arguments(arguments) if hooks else valid_arguments(
+        valid = valid_hook_arguments(arguments) if hooks and name != "prompt" else valid_arguments(
             tools[name]["inputSchema"], arguments)
         if not valid:
             return error(-32602, "Invalid tool arguments")

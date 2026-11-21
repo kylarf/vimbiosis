@@ -64,15 +64,21 @@ def bridge():
         key = secrets.token_hex(16)
         event = threading.Event()
         operation = request["op"]
-        with lock:
-            if operation == "notify":
-                targets = request.get("targets")
-                if targets is None:
-                    targets = [{"path": path} for path in request["files"]]
-                request["changes"] = snapshots.finish(request.get("hook_id", ""), targets)
-            pending[key] = [event, None]
+        session = request.get("session", "")
         try:
             with output_lock:
+                with lock:
+                    if operation == "prompt":
+                        snapshots.reset(session)
+                        request = {"op": "workspace"}
+                    baseline = snapshots.prompts.get(session)
+                    if operation == "notify":
+                        targets = request.get("targets")
+                        if targets is None:
+                            targets = [{"path": path} for path in request["files"]]
+                        request["changes"] = snapshots.finish(
+                            request.get("hook_id", ""), targets, session)
+                    pending[key] = [event, None]
                 deadline = int((time.time() + VIM_REPLY_TIMEOUT) * 1000)
                 print(json.dumps([0, {"id": key, "request": request,
                                       "deadline": deadline}]), flush=True)
@@ -81,7 +87,7 @@ def bridge():
             with lock:
                 result = pending[key][1]
                 if operation == "before" and result.get("ok"):
-                    snapshots.capture(request.get("hook_id", ""), request["files"])
+                    snapshots.capture(request.get("hook_id", ""), request["files"], session, baseline)
             return result
         finally:
             with lock:

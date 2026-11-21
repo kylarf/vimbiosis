@@ -30,9 +30,9 @@ available on its PATH.
 
 Configure both pre- and post-edit hooks using the setup guide for your agent.
 Pre-edit checks block direct edits when a Vim buffer contains unsaved work and
-ask the agent to wait for your decision. Passing checks capture a before
-snapshot so completed edits can highlight added/changed lines and mark
-deletions.
+ask the agent to wait for your decision. The prompt hook resets the diff
+baseline. The first successful pre-edit check for each file captures its
+disk contents for the cumulative diff shown after each edit.
 
 Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and
 `:VbioPrevious` to navigate them. Entering Insert mode clears the current

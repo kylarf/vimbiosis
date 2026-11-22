@@ -15,6 +15,48 @@ from hooks import targets
 
 
 class ChangeTests(unittest.TestCase):
+    def test_native_diff_tab_uses_live_buffer_and_restores_valid_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file = Path(tmp) / "live.txt"
+            file.write_text("new\nkeep\n")
+            script = Path(tmp) / "review.vim"
+            errors = Path(tmp) / "errors"
+            script.write_text("\n".join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                "runtime plugin/vimbiosis.vim",
+                "let g:vimbiosis_enable_virtual_text = 0",
+                "execute 'edit ' . fnameescape(" + json.dumps(str(file)) + ")",
+                "let live = bufnr('%')",
+                "let origin = win_getid()",
+                "let change = {'path': expand('%:p'), 'before_lines': ['old', 'keep'], 'hunks': [{'line': 1, 'end_line': 1, 'kind': 'changed', 'text': 'Changed'}]}",
+                "call vimbiosis#changes#record(change, origin)",
+                "VbioChanges",
+                "VbioDiff",
+                "call assert_equal(live, bufnr('%'))",
+                "call assert_equal(2, tabpagenr('$'))",
+                "call assert_equal(1, &l:diff)",
+                "call assert_equal([], sign_getplaced(live, {'group': 'Vimbiosis'})[0].signs)",
+                "call win_gotoid(origin)",
+                "call assert_equal(1, len(sign_getplaced(live, {'group': 'Vimbiosis'})[0].signs))",
+                "VbioDiff",
+                "call assert_equal(2, tabpagenr('$'))",
+                "1diffget",
+                "call assert_equal('old', getline(1))",
+                "tabclose",
+                "call assert_equal('old', getbufline(live, 1)[0])",
+                "call assert_equal([], sign_getplaced(live, {'group': 'Vimbiosis'})[0].signs)",
+                "call writefile(v:errors, " + json.dumps(str(errors)) + ")",
+                "if !empty(v:errors) | cquit | endif",
+                "qa!",
+            ]))
+            result = subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-V1", "-S", str(script)],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr +
+                             (errors.read_text() if errors.exists() else ""))
+            self.assertEqual(file.read_text(), "new\nkeep\n")
+
     def test_marker_modes_and_automatic_gutter(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = Path(tmp) / 'result'
@@ -308,9 +350,29 @@ class ChangeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "file.txt"
             path.write_text("one\ntwo\nthree\n")
-            ranges = Snapshots().finish("missing", [{"path": str(path)}])[0]["hunks"]
+            change = Snapshots().finish("missing", [{"path": str(path)}])[0]
+            self.assertNotIn("before_lines", change)
+            ranges = change["hunks"]
             self.assertEqual(ranges[0]["kind"], "unknown")
             self.assertEqual(ranges[0]["end_line"], 1)
+
+    def test_diff_baselines_for_creation_rename_and_deletion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source, renamed, created = (Path(tmp) / name for name in ("old", "new", "created"))
+            source.write_text("before\n")
+            snapshots = Snapshots()
+            snapshots.capture("edit", [str(source), str(created)])
+            source.rename(renamed)
+            created.write_text("added\n")
+            changes = snapshots.finish("edit", [
+                {"path": str(renamed), "source": str(source)},
+                {"path": str(created)},
+                {"path": str(source)},
+            ])
+            self.assertEqual(changes[0]["before_lines"], ["before"])
+            self.assertEqual(changes[1]["before_lines"], [])
+            self.assertTrue(changes[2]["deleted"])
+            self.assertNotIn("before_lines", changes[2])
 
     def test_batch_displays_only_the_last_hidden_file(self):
         with tempfile.TemporaryDirectory(prefix="vbio test ") as tmp:

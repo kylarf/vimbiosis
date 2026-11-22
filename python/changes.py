@@ -60,5 +60,8 @@ class Snapshots:
             elif source != path and not ranges:
                 ranges = [{"line": 1, "end_line": 1, "kind": "changed",
                            "text": "File moved from " + source}]
-            changes.append({"path": path, "hunks": ranges, "deleted": deleted})
+            change = {"path": path, "hunks": ranges, "deleted": deleted}
+            if source in before and not deleted:
+                change["before_lines"] = before[source]
+            changes.append(change)
         return changes

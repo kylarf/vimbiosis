@@ -45,7 +45,13 @@ snapshot so completed edits can highlight added/changed lines and mark
 deletions.
 
 Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and
-`:VbioPrevious` to navigate them. Entering Insert mode clears the current
+`:VbioPrevious` to navigate them. Run `:VbioDiff` from a file or a selected
+change-list row to open a native diff tab with the pre-edit snapshot on the left
+and the editable file on the right. Use `[c` and `]c` to navigate hunks,
+`do` to restore a hunk from the snapshot, and `:tabclose` to leave the review.
+
+Outside the review tab,
+entering Insert mode clears the current
 buffer's highlights, virtual text and deletion signs while retaining the change
 list. `:VbioClear` clears the current buffer's markers manually;
 `:VbioChangesClear` clears the list and all its markers. See `:help

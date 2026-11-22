@@ -14,6 +14,7 @@ COMMANDS                                                *vimbiosis-commands*
 :VbioDetach                       Stop the bridge and detach.
 :VbioFollow                       Toggle automatic file following.
 :VbioChanges                      Open the change location list.
+:VbioDiff                         Review the current file in a native diff tab.
 :VbioToggleChanges                Toggle the agent change location list.
 :VbioNext                         Jump to the next changed region.
 :VbioPrevious                     Jump to the previous changed region.
@@ -95,6 +96,12 @@ Entering Insert mode clears all Vimbiosis highlights, virtual text and signs in 
 Other buffers retain their markers. Change-list entries remain navigable;
 clearing markers does not remove them. A later edit replaces the previous
 regions for that file. :VbioChangesClear clears both the list and all markers.
+
+:VbioDiff opens or focuses a side-by-side review tab from a file or selected
+Vimbiosis location-list row. The left pane holds the pre-edit snapshot and
+the right pane is the live file buffer. Use [c and ]c to move between hunks,
+do to restore a hunk from the left, and :tabclose to leave the review.
+Inline markers return when you leave the review if the buffer has not changed.
 
 :VbioChanges opens a location list of changed regions across files. Select an
 entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file

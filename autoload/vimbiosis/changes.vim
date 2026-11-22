@@ -168,7 +168,7 @@ function! s:text_width(buffer) abort
   return l:width
 endfunction
 
-function! s:removed_text(buffer, text, width, marker, padding) abort
+function! s:removed_text(buffer, text, width, marker) abort
   let l:text = a:marker
   " Inline markers count toward Vim's tab stops on live lines.
   let l:column = 1
@@ -198,12 +198,12 @@ function! s:removed_text(buffer, text, width, marker, padding) abort
   let l:row = ''
   for l:character in split(l:text, '\zs')
     if strdisplaywidth(l:row . l:character) > l:width && !empty(l:row)
-      call add(l:rows, l:row . repeat(a:padding, max([0, l:width - strdisplaywidth(l:row)])))
+      call add(l:rows, l:row . repeat(' ', max([0, l:width - strdisplaywidth(l:row)])))
       let l:row = ''
     endif
     let l:row .= l:character
   endfor
-  call add(l:rows, l:row . repeat(a:padding, max([0, l:width - strdisplaywidth(l:row)])))
+  call add(l:rows, l:row . repeat(' ', max([0, l:width - strdisplaywidth(l:row)])))
   return l:rows
 endfunction
 
@@ -258,7 +258,7 @@ function! vimbiosis#changes#paint(buffer) abort
     if l:virtual && !empty(get(l:hunk, 'removed_lines', []))
       let l:has_removals = 1
       for l:text in l:hunk.removed_lines
-        for l:row in s:removed_text(a:buffer, l:text, l:width, l:remove_char, l:padding_char)
+        for l:row in s:removed_text(a:buffer, l:text, l:width, l:remove_char)
           call prop_add(l:hunk.line, 0, {'bufnr': a:buffer,
                 \ 'type': 'VimbiosisRemoved', 'text': l:row,
                 \ 'text_align': get(l:hunk, 'removed_placement', 'above'),
@@ -291,7 +291,7 @@ function! vimbiosis#changes#paint(buffer) abort
           let l:padding = (l:width - strdisplaywidth(l:marker . l:text) % l:width) % l:width
           if l:padding > 0
             call prop_add(l:line, 0, {'bufnr': a:buffer, 'type': 'VimbiosisAddedFill',
-                  \ 'text': repeat(l:padding_char, l:padding), 'text_wrap': 'truncate'})
+                  \ 'text': repeat(' ', l:padding), 'text_wrap': 'truncate'})
           endif
         endif
       else

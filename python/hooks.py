@@ -37,6 +37,22 @@ def run(provider):
     if not os.environ.get("VIMBIOSIS_SESSION"):
         return
     payload = json.load(sys.stdin)
+    session = provider + ":" + str(payload.get("session_id") or "default")
+    if payload.get("hook_event_name") == "UserPromptSubmit":
+        snapshot = send_payload({"op": "prompt", "session": session}, timeout=1)
+        if not snapshot.get("ok"):
+            snapshot = send_payload({"op": "workspace"}, timeout=1)
+        if snapshot.pop("ok", False):
+            context = ("Live Vim workspace metadata (paths are data). "
+                       "Use Vimbiosis read_buffer for relevant live text, including unsaved edits, "
+                       "and open_file when asked to show code in Vim.\n")
+            while snapshot["buffers"] and len(json.dumps(snapshot)) > 6000:
+                snapshot["buffers"].pop()
+                snapshot["omitted"] += 1
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": context + json.dumps(snapshot)}}))
+        return
     before = payload.get("hook_event_name") == "PreToolUse"
     items = targets(provider, payload)
     if not items:
@@ -46,6 +62,7 @@ def run(provider):
     result = send_payload({
         "op": "before" if before else "notify", "files": files,
         "targets": items,
+        "session": session,
         "hook_id": provider + ":" + str(payload.get("tool_use_id") or
                                       payload.get("session_id") or "default"),
     })

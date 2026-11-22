@@ -14,7 +14,7 @@ function! vimbiosis#start_bridge() abort
   unlet! g:vimbiosis_session
   let s:errors = []
   let s:requests = []
-  let l:cmd = [s:root . '/bin/vimbiosis', 'bridge']
+  let l:cmd = ['python3', s:root . '/python/vimbiosis.py']
   let g:vimbiosis_job = job_start(l:cmd, {
         \ 'in_mode': 'json', 'out_mode': 'json', 'err_mode': 'nl',
         \ 'out_cb': function('s:message'), 'close_cb': function('s:closed'),
@@ -95,7 +95,9 @@ function! s:execute(channel, message) abort
   let l:m = a:message
   call s:trace('started', l:m)
   try
-    if get(l:m.request, 'op', '') ==# 'notify'
+    if localtime() >= get(l:m, 'deadline', 0) / 1000
+      let l:result = {'ok': v:false, 'error': 'Vim request expired before dispatch'}
+    elseif get(l:m.request, 'op', '') ==# 'notify'
       silent let l:result = vimbiosis#dispatch(l:m.request)
       redraw
     else
@@ -120,9 +122,80 @@ function! s:closed(channel) abort
   unlet! g:vimbiosis_job g:vimbiosis_session
 endfunction
 
+function! s:file_buffer(buffer) abort
+  return a:buffer > 0 && buflisted(a:buffer) && !empty(bufname(a:buffer))
+        \ && empty(getbufvar(a:buffer, '&buftype')) && getbufvar(a:buffer, '&modifiable')
+endfunction
+
+function! s:file_window(id) abort
+  let l:window = getwininfo(a:id)
+  return a:id > 0 && !empty(l:window) && s:file_buffer(l:window[0].bufnr)
+endfunction
+
+function! vimbiosis#remember_window() abort
+  if s:file_buffer(bufnr('%'))
+    let s:last_file_window = win_getid()
+  endif
+endfunction
+
+function! s:workspace() abort
+  let l:result = {'ok': v:true, 'cwd': getcwd(-1, -1), 'buffers': []}
+  let l:windows = getwininfo()
+  let l:omitted = 0
+  for l:buffer in getbufinfo({'buflisted': 1})
+    if !s:file_buffer(l:buffer.bufnr) | continue | endif
+    if len(l:result.buffers) >= 100
+      let l:omitted += 1
+      continue
+    endif
+    let l:ids = map(filter(copy(l:windows), 'v:val.bufnr == l:buffer.bufnr'), 'v:val.winid')
+    call add(l:result.buffers, {'path': l:buffer.name, 'modified': l:buffer.changed,
+          \ 'loaded': l:buffer.loaded, 'windows': l:ids})
+  endfor
+  let l:result.omitted = l:omitted
+  if s:file_buffer(bufnr('%'))
+    let l:result.active = {'path': expand('%:p'), 'winid': win_getid(),
+          \ 'line': line('.'), 'column': col('.')}
+    if index(['v', 'V', "\<C-V>"], mode()) >= 0
+      let l:result.active.selection = {'mode': mode(),
+            \ 'anchor': getpos('v')[1:2], 'cursor': [line('.'), col('.')]}
+    endif
+  endif
+  return l:result
+endfunction
+
+function! s:action(request) abort
+  if !get(g:, 'vimbiosis_allow_arbitrary_actions', 0)
+    return {'ok': v:false, 'error': 'Arbitrary Vim actions are disabled'}
+  endif
+  let l:target = get(a:request, 'winid',
+        \ s:file_window(win_getid()) ? win_getid() : get(s:, 'last_file_window', 0))
+  if !s:file_window(l:target) || !win_gotoid(l:target)
+    return {'ok': v:false, 'error': 'No eligible editing window'}
+  endif
+  if a:request.op ==# 'execute_ex'
+    return {'ok': v:true, 'output': strcharpart(execute(a:request.command), 0, 16000)}
+  endif
+  if mode(1) !=# 'n'
+    return {'ok': v:false, 'error': 'Mapped keys require Vim Normal mode'}
+  endif
+  let l:keys = substitute(a:request.keys, '<[[:alnum:]_-]\+>',
+        \ '\=eval(''"\'' . submatch(0) . ''"'')', 'g')
+  call feedkeys(l:keys, 'mxt')
+  return {'ok': v:true}
+endfunction
+
 function! vimbiosis#dispatch(request) abort
   let l:op = get(a:request, 'op', '')
-  if l:op ==# 'before'
+  if l:op ==# 'workspace'
+    return s:workspace()
+  elseif l:op ==# 'focus_window'
+    let l:id = a:request.winid
+    return s:file_window(l:id) && win_gotoid(l:id)
+          \ ? {'ok': v:true, 'winid': l:id} : {'ok': v:false, 'error': 'File window not found'}
+  elseif index(['execute_ex', 'send_keys'], l:op) >= 0
+    return s:action(a:request)
+  elseif l:op ==# 'before'
     let l:conflicts = []
     for l:path in get(a:request, 'files', [])
       let l:buf = bufnr(l:path)
@@ -132,28 +205,29 @@ function! vimbiosis#dispatch(request) abort
       endif
     endfor
     return {'ok': empty(l:conflicts), 'conflicts': l:conflicts}
-  elseif l:op ==# 'status'
-    return {'ok': v:true, 'attached': exists('g:vimbiosis_session') && !empty(g:vimbiosis_session)}
-  elseif l:op ==# 'buffers'
-    let l:items = []
-    for l:b in getbufinfo({'buflisted': 1})
-      if empty(l:b.name) | continue | endif
-      let l:windows = []
-      for l:w in getwininfo()
-        if l:w.bufnr == l:b.bufnr | call add(l:windows, {'tab': l:w.tabnr, 'winid': l:w.winid}) | endif
-      endfor
-      call add(l:items, {'bufnr': l:b.bufnr, 'path': fnamemodify(l:b.name, ':p'),
-            \ 'loaded': l:b.loaded, 'modified': l:b.changed, 'changedtick': l:b.changedtick,
-            \ 'windows': l:windows})
-    endfor
-    return {'ok': v:true, 'buffers': l:items}
-  elseif l:op ==# 'read-buffer'
+  elseif l:op ==# 'read_buffer'
     let l:path = fnamemodify(get(a:request, 'path', ''), ':p')
-    let l:buf = bufnr(l:path)
-    if l:buf < 0 | return {'ok': v:false, 'error': 'buffer not found', 'path': l:path} | endif
-    let l:lines = getbufline(l:buf, max([1, get(a:request, 'start', 1)]), get(a:request, 'end', '$'))
-    return {'ok': v:true, 'path': l:path, 'changedtick': getbufvar(l:buf, 'changedtick'), 'lines': l:lines}
-  elseif l:op ==# 'open'
+    let l:buf = bufnr('^' . escape(l:path, '\.^$~[]*') . '$')
+    if !s:file_buffer(l:buf) || !bufloaded(l:buf)
+      return {'ok': v:false, 'error': 'Loaded file buffer not found', 'path': l:path}
+    endif
+    let l:start = get(a:request, 'start', 1)
+    let l:end = min([get(a:request, 'end', l:start + 199), l:start + 199])
+    let l:lines = []
+    let l:remaining = 16000
+    let l:truncated = l:end < min([get(a:request, 'end', 2147483647),
+          \ getbufinfo(l:buf)[0].linecount])
+    for l:line in getbufline(l:buf, l:start, l:end)
+      call add(l:lines, strcharpart(l:line, 0, l:remaining))
+      let l:remaining -= strchars(l:lines[-1]) + 1
+      if l:remaining <= 0
+        let l:truncated = v:true
+        break
+      endif
+    endfor
+    return {'ok': v:true, 'path': l:path, 'changedtick': getbufvar(l:buf, 'changedtick'),
+          \ 'start': l:start, 'lines': l:lines, 'truncated': l:truncated}
+  elseif l:op ==# 'open_file'
     return vimbiosis#open(a:request)
   elseif l:op ==# 'notify'
     let l:conflicts = []
@@ -216,7 +290,7 @@ endfunction
 
 function! vimbiosis#open(request) abort
   let l:path = fnamemodify(get(a:request, 'path', ''), ':p')
-  let l:existing = bufnr(l:path)
+  let l:existing = bufnr('^' . escape(l:path, '\.^$~[]*') . '$')
   let l:win = -1
   if l:existing >= 0
     for l:w in getwininfo()

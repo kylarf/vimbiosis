@@ -28,6 +28,7 @@ class InteractiveTests(unittest.TestCase):
             probe = directory / "probe.py"
             probe.write_text("""
 import json, pathlib, subprocess, sys, time
+import os, urllib.request
 root, folder = map(pathlib.Path, sys.argv[1:])
 files = [folder / ('file' + str(i) + '.txt') for i in range(3)]
 for path in files:
@@ -47,6 +48,11 @@ def hook(event, paths, key):
 # Load one file, switch away, then revisit it after another on-disk edit.
 # Leave autoread off, matching Vim's default.
 time.sleep(4.2)
+context = subprocess.run([sys.executable, str(root / 'codex/hooks/post-edit.py')],
+    input=json.dumps({'hook_event_name': 'UserPromptSubmit'}),
+    capture_output=True, text=True, check=True, timeout=5)
+metadata = json.loads(json.loads(context.stdout)['hookSpecificOutput']
+                      ['additionalContext'].split('\\n', 1)[1])
 for key, paths, line, text in [
     ('initial', files[:1], 0, 'first edit'),
     ('batch', files, 1, 'second edit'),
@@ -62,7 +68,24 @@ for key, paths, line, text in [
     time.sleep(.1)
     if not hook('PostToolUse', paths, key):
         break
-(folder / 'done').write_text(json.dumps({'events': events}))
+
+port, token = os.environ['VIMBIOSIS_SESSION'].split(':')
+def tool(name, **arguments):
+    request = urllib.request.Request(f'http://127.0.0.1:{port}/mcp',
+        json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                    'params': {'name': name, 'arguments': arguments}}).encode(),
+        {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=6) as reply:
+        result = json.load(reply)['result']
+        return json.loads(result['content'][0]['text'])
+
+opened = tool('open_file', path=metadata['cwd'] + '/first.txt', line=1)
+mapped = tool('send_keys', keys='<F5>')
+read = tool('read_buffer', path=opened['path'])
+tool('execute_ex', command='let g:vimbiosis_allow_arbitrary_actions = 0')
+denied = tool('execute_ex', command='echo "should be blocked"')
+(folder / 'done').write_text(json.dumps({'events': events, 'metadata': metadata,
+    'opened': opened, 'mapped': mapped, 'read': read, 'denied': denied}))
 """)
             boot = directory / "boot.vim"
             command = [sys.executable, str(probe), str(ROOT), tmp]
@@ -71,6 +94,11 @@ for key, paths, line, text in [
                 "set noautoread hidden",
                 "autocmd FileType qf wincmd J",
                 "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                "runtime plugin/vimbiosis.vim",
+                "new first.txt",
+                "new second.txt",
+                "let g:vimbiosis_allow_arbitrary_actions = 1",
+                "nnoremap <F5> :call setline(1, 'unsaved mapping output')<CR>",
                 "call vimbiosis#start_bridge()",
                 "call term_start(" + json.dumps(command) + ", {'env':",
                 "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_session}})",
@@ -90,6 +118,14 @@ for key, paths, line, text in [
                         screen += os.read(fd, 65536)
                 self.assertTrue(done.exists(), "Hook did not finish without a keypress")
                 result = json.loads(done.read_text())
+                self.assertNotIn("active", result["metadata"])
+                self.assertTrue(result["opened"]["ok"], result)
+                self.assertTrue(result["mapped"]["ok"], result)
+                self.assertEqual(result["read"]["lines"], ["unsaved mapping output"])
+                self.assertFalse(result["denied"]["ok"])
+                self.assertEqual({Path(buffer["path"]).name
+                                  for buffer in result["metadata"]["buffers"]},
+                                 {"first.txt", "second.txt"})
                 self.assertEqual(len(result["events"]), 8, result)
                 for event in result["events"]:
                     self.assertEqual(event["code"], 0, event)

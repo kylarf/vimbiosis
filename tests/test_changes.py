@@ -100,7 +100,7 @@ class ChangeTests(unittest.TestCase):
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",
                 "call assert_equal(['R', 'C', 'A', '.', 'R'], map(range(1, 5), {_, row -> screenstring(row, 1)}))",
-                "call assert_equal(['.', '.', '.'], map(range(1, 3), {_, row -> screenstring(row, 40)}))",
+                "call assert_equal(repeat([' '], 5), map(range(1, 5), {_, row -> screenstring(row, 40)}))",
                 "let g:vimbiosis_enable_virtual_text = 0",
                 "call vimbiosis#changes#paint(bufnr('%'))",
                 "redraw!",
@@ -264,7 +264,7 @@ class ChangeTests(unittest.TestCase):
     def test_bridge_startup_and_restart_from_installation_with_spaces(self):
         with tempfile.TemporaryDirectory(prefix="vbio install ") as tmp:
             directory = Path(tmp)
-            for name in ("autoload", "bin", "python"):
+            for name in ("autoload", "python"):
                 shutil.copytree(ROOT / name, directory / name,
                                 ignore=shutil.ignore_patterns("__pycache__"))
             result = directory / "result"
@@ -303,8 +303,7 @@ class ChangeTests(unittest.TestCase):
     def test_bridge_startup_failure_reports_stderr(self):
         with tempfile.TemporaryDirectory(prefix="vbio failure ") as tmp:
             directory = Path(tmp)
-            for name in ("autoload", "bin"):
-                shutil.copytree(ROOT / name, directory / name)
+            shutil.copytree(ROOT / "autoload", directory / "autoload")
             (directory / "python").mkdir()
             (directory / "python/vimbiosis.py").write_text(
                 "import sys\nprint('bridge startup probe failed', file=sys.stderr)\nsys.exit(1)\n")
@@ -435,6 +434,36 @@ class ChangeTests(unittest.TestCase):
         self.assertEqual(result, [{"path": str(ROOT / "new.txt"),
                                    "source": str(ROOT / "old.txt")}])
 
+    def test_prompt_baselines_reset_and_follow_moves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old, new = (str(Path(tmp) / name) for name in ("old", "new"))
+            snapshots = Snapshots()
+
+            def capture(key, paths, session="agent"):
+                snapshots.capture(key, paths, session, snapshots.prompts[session])
+
+            snapshots.reset("agent")
+            Path(old).write_text("original\n")
+            capture("move", [old, new])
+            Path(old).rename(new)
+            snapshots.finish("move", [{"path": new, "source": old}], "agent")
+            capture("edit", [new])
+            Path(new).write_text("changed\n")
+            change, = snapshots.finish("edit", [{"path": new}], "agent")
+            self.assertEqual(change["hunks"][0]["removed_lines"], ["original"])
+            snapshots.reset("other")
+            capture("edit", [new], "other")
+            capture("late", [new])
+            snapshots.reset("agent")
+            self.assertEqual(snapshots.finish("late", [{"path": new}], "agent"), [])
+            capture("revert", [new])
+            Path(new).write_text("original\n")
+            change, = snapshots.finish("edit", [{"path": new}], "other")
+            self.assertEqual(change["hunks"][0]["removed_lines"], ["changed"])
+            Path(new).write_text("changed\n")
+            change, = snapshots.finish("revert", [{"path": new}], "agent")
+            self.assertEqual(change["hunks"], [])
+
     def exercise_hooks(self, provider):
         with tempfile.TemporaryDirectory(prefix="vimbiosis test ") as tmp:
             directory = Path(tmp)
@@ -464,6 +493,7 @@ class ChangeTests(unittest.TestCase):
                 "let edited_buffer = bufnr(" + q(edited) + ")",
                 "let added_buffer = bufnr(" + q(added) + ")",
                 "let before = sign_getplaced(edited_buffer, {'group': 'Vimbiosis'})[0].signs",
+                "let removed = getbufvar(edited_buffer, 'vimbiosis_hunks')[0].removed_lines",
                 'call win_execute(original, "doautocmd InsertEnter")',
                 "let after = sign_getplaced(edited_buffer, {'group': 'Vimbiosis'})[0].signs",
                 "let other = sign_getplaced(added_buffer, {'group': 'Vimbiosis'})[0].signs",
@@ -478,7 +508,7 @@ class ChangeTests(unittest.TestCase):
                 "let next_file = expand('%:p')",
                 "call win_gotoid(original)",
                 "let review_window = getloclist(win_id2win(g:vimbiosis_live_win), {'winid': 0}).winid",
-                "let state = {'before': before, 'after': after, 'other': other,",
+                "let state = {'before': before, 'after': after, 'other': other, 'removed': removed,",
                 "\\ 'entries': lists, 'focus': win_getid() == original,",
                 "\\ 'review_visible': review_window > 0,",
                 "\\ 'previous_file': previous_file, 'next_file': next_file,",
@@ -521,11 +551,17 @@ class ChangeTests(unittest.TestCase):
                     self.assertEqual(run.returncode, 0, run.stderr)
                     return json.loads(run.stdout) if run.stdout else None
 
+                self.assertIn("additionalContext",
+                              hook("UserPromptSubmit", edited, "")["hookSpecificOutput"])
+                edited.write_text("one\ndisk baseline\nthree\n")
                 denied = hook("PreToolUse", [edited, conflict] if provider == "codex"
                               else conflict, "blocked")
                 self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
                 self.assertIn("ask the user", denied["hookSpecificOutput"]["permissionDecisionReason"])
                 self.assertEqual(conflict.read_text(), "original\n")
+                self.assertIsNone(hook("PreToolUse", edited, "first"))
+                edited.write_text("one\nintermediate\n")
+                self.assertIsNone(hook("PostToolUse", edited, "first"))
                 if provider == "codex":
                     self.assertIsNone(hook("PreToolUse", [edited, added], "batch"))
                     edited.write_text("one\nthree\n")
@@ -543,6 +579,7 @@ class ChangeTests(unittest.TestCase):
                 self.assertEqual(proc.returncode, 0, proc.stderr.read())
                 state = json.loads(result.read_text())
                 self.assertEqual(state["before"][0]["name"], "VimbiosisDeleted")
+                self.assertEqual(state["removed"], ["disk baseline"])
                 self.assertEqual(state["after"], [])
                 self.assertEqual(state["other"][0]["name"], "VimbiosisAdded")
                 self.assertEqual(len(state["entries"]), 2)

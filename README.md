@@ -39,6 +39,8 @@ Use `:VbioChanges` to review changed regions across files, or `:VbioNext` and
 change-list row to open a native diff tab with the pre-edit snapshot on the left
 and the editable file on the right. Use `[c` and `]c` to navigate hunks,
 `do` to restore a hunk from the snapshot, and `:tabclose` to leave the review.
+`:VbioDiffAll` opens one review tab per changed file with a snapshot, reusing
+any review tabs already open.
 
 Outside the review tab,
 entering Insert mode clears the current

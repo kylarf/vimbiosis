@@ -76,10 +76,35 @@ function! vimbiosis#changes#diff() abort
     let l:col = l:item.col
     let l:origin = get(l:list, 'filewinid', 0)
   endif
-  let l:path = l:buf > 0 ? resolve(fnamemodify(bufname(l:buf), ':p')) : ''
-  let l:review = get(s:reviews, l:buf, {})
+  call s:open_diff(l:buf, l:line, l:col, l:origin)
+endfunction
+
+function! vimbiosis#changes#diff_all() abort
+  let l:origin = get(t:, 'vimbiosis_review', 0) ? vimbiosis#changes#review_origin() :
+        \ (&buftype ==# 'quickfix' ? s:owner : win_getid())
+  let l:seen = {}
+  for l:entry in copy(s:entries)
+    let l:path = resolve(fnamemodify(l:entry.filename, ':p'))
+    if has_key(l:seen, l:path) || get(s:baselines, l:path, v:null) is v:null
+          \ || !filereadable(l:path)
+      continue
+    endif
+    let l:seen[l:path] = 1
+    let l:buf = bufadd(l:path)
+    if !has_key(s:reviews, l:buf)
+      call s:open_diff(l:buf, l:entry.lnum, l:entry.col, l:origin)
+    endif
+  endfor
+  if empty(l:seen)
+    echomsg 'Vimbiosis: no agent changes with an available baseline and live file'
+  endif
+endfunction
+
+function! s:open_diff(buffer, line, col, origin) abort
+  let l:path = a:buffer > 0 ? resolve(fnamemodify(bufname(a:buffer), ':p')) : ''
+  let l:review = get(s:reviews, a:buffer, {})
   if !empty(l:review) && win_gotoid(l:review.live)
-    call cursor(l:line, l:col)
+    call cursor(a:line, a:col)
     return
   endif
   let l:before = get(s:baselines, l:path, v:null)
@@ -90,7 +115,7 @@ function! vimbiosis#changes#diff() abort
   let l:return = win_getid()
   let l:parent = tabpagenr()
   try
-    execute 'tab sbuffer ' . l:buf
+    execute 'tab sbuffer ' . a:buffer
     let l:live = win_getid()
     call vimbiosis#changes#enter()
     aboveleft vertical new
@@ -98,13 +123,13 @@ function! vimbiosis#changes#diff() abort
     execute 'file ' . fnameescape('[Vimbiosis baseline ' . l:live . ']')
     call setline(1, empty(l:before) ? [''] : l:before)
     setlocal nomodified readonly nomodifiable
-    let s:reviews[l:buf] = {'live': l:live, 'base': win_getid(), 'scratch': bufnr('%'),
-          \ 'origin': l:origin, 'tick': getbufvar(l:buf, 'changedtick')}
-    let t:vimbiosis_review = l:buf
+    let s:reviews[a:buffer] = {'live': l:live, 'base': win_getid(), 'scratch': bufnr('%'),
+          \ 'origin': a:origin, 'tick': getbufvar(a:buffer, 'changedtick')}
+    let t:vimbiosis_review = a:buffer
     diffthis
     call win_gotoid(l:live)
     diffthis
-    call cursor(l:line, l:col)
+    call cursor(a:line, a:col)
     call vimbiosis#changes#review_update(0)
   catch
     let l:error = v:exception

@@ -15,6 +15,46 @@ from hooks import targets
 
 
 class ChangeTests(unittest.TestCase):
+    def test_diff_all_opens_one_review_per_reviewable_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            first, second, unknown = (directory / name for name in ("first", "second", "unknown"))
+            for file in (first, second, unknown):
+                file.write_text("new\nkeep\nlast\n")
+            script = directory / "review.vim"
+            errors = directory / "errors"
+            script.write_text("\n".join([
+                "execute 'set rtp^=' . fnameescape(" + json.dumps(str(ROOT)) + ")",
+                "runtime plugin/vimbiosis.vim",
+                "let g:vimbiosis_enable_virtual_text = 0",
+                "execute 'edit ' . fnameescape(" + json.dumps(str(first)) + ")",
+                "let origin = win_getid()",
+                "let first = bufnr('%')",
+                "let hunks = map([1, 3], {_, n -> {'line': n, 'end_line': n, 'kind': 'changed', 'text': 'Changed'}})",
+                "call vimbiosis#changes#record({'path': expand('%:p'), 'before_lines': ['old'], 'hunks': hunks}, origin)",
+                "call vimbiosis#changes#record({'path': " + json.dumps(str(second)) + ", 'before_lines': [], 'hunks': hunks}, origin)",
+                "call vimbiosis#changes#record({'path': " + json.dumps(str(unknown)) + ", 'hunks': hunks}, origin)",
+                "VbioDiff",
+                "let first_review = win_getid()",
+                "VbioDiffAll",
+                "call assert_equal(3, tabpagenr('$'))",
+                "call assert_equal(1, &l:diff)",
+                "call assert_equal(resolve(" + json.dumps(str(second)) + "), resolve(expand('%:p')))",
+                "call assert_equal(origin, vimbiosis#changes#review_origin())",
+                "call assert_equal(first, getwininfo(first_review)[0].bufnr)",
+                "VbioDiffAll",
+                "call assert_equal(3, tabpagenr('$'))",
+                "call writefile(v:errors, " + json.dumps(str(errors)) + ")",
+                "if !empty(v:errors) | cquit | endif",
+                "qa!",
+            ]))
+            result = subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es", "-V1", "-S", str(script)],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr +
+                             (errors.read_text() if errors.exists() else ""))
+
     def test_native_diff_tab_uses_live_buffer_and_restores_valid_markers(self):
         with tempfile.TemporaryDirectory() as tmp:
             file = Path(tmp) / "live.txt"

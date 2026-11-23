@@ -6,8 +6,12 @@ Vim loads the plugin automatically.
 
 Start with `:Vbio codex` or `:Vbio claude`. Vim supplies session-specific MCP
 configuration to the agent in its terminal split. To start an external agent
-against the same Vim instance, run `:VbioAttach` and use the printed exports
-and launch command. See the [Claude setup guide](claude/INSTALL.md) or
+against the same Vim instance, add this checkout's `bin` directory to your
+PATH. Run `:VbioAttach` in Vim, then run `vimbiosis -s ID codex` (or
+`vimbiosis -s ID claude`) in your external shell using the displayed ID.
+You can omit `-s ID` when exactly one live session matches your working
+directory. Pass agent arguments after the agent name. See the
+[Claude setup guide](claude/INSTALL.md) or
 [Codex setup guide](codex/INSTALL.md) for automatic prompt context and edit hooks.
 
 The prompt hook supplies Vim's working directory and editable file buffers.
@@ -26,7 +30,9 @@ MCP Streamable HTTP bound only to `127.0.0.1`, authenticated with a random per-s
 using the same transport on macOS, Linux, and Windows.
 
 On Windows, use Git Bash with `vim`, `python3`, and the agent commands
-available on its PATH.
+available on its PATH. The external launcher uses native `codex.exe` or
+`claude.exe`. You can also pass the full executable path. Use Windows paths
+such as `C:/work/file.txt` in arguments that the native agent treats as paths.
 
 Configure both pre- and post-edit hooks using the setup guide for your agent.
 Pre-edit checks block direct edits when a Vim buffer contains unsaved work and

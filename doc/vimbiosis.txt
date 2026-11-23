@@ -8,7 +8,7 @@ Vim-owned MCP listener for the agent it starts.
 COMMANDS                                                *vimbiosis-commands*
 
 :Vbio {codex|claude} [arguments]  Start an agent in a terminal split.
-:VbioAttach                       Attach the current Vim to an external agent.
+:VbioAttach                       Show the session ID for an external agent.
 :VbioStatus                       Show bridge status.
 :VbioDetach                       Stop the bridge and detach.
 :VbioFollow                       Toggle automatic file following.
@@ -21,14 +21,17 @@ COMMANDS                                                *vimbiosis-commands*
 :VbioClear                        Clear this buffer's change markers.
 :VbioChangesClear                 Clear the change list and all its markers.
 
-After :VbioAttach, use the printed exports and agent launch command in the
-external shell. The agent uses the per-session MCP configuration at startup.
+Add the checkout's bin directory to PATH. After :VbioAttach, run
+vimbiosis -s ID codex or vimbiosis -s ID claude in the external shell with
+the displayed ID. --session is equivalent to -s. Omit it when exactly one
+live session matches the shell's working directory. Agent arguments go
+after the agent executable.
 
 The bridge requires Python 3 available as python3. It listens on an OS-assigned
 TCP port bound only to 127.0.0.1 and authenticates requests using a random
 per-session token. VIMBIOSIS_SESSION contains <port>:<token>. Startup waits up
 to five seconds for the bridge to publish this descriptor before launching an
-agent or printing an attachment command. The bridge exits when Vim closes its
+agent or displaying the session ID. The bridge exits when Vim closes its
 input channel, and Vim clears the session when the bridge exits or detaches.
 
 On Windows, run Vim from Git Bash with python3 and the agent commands on PATH.

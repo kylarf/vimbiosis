@@ -22,7 +22,7 @@ class BridgeTests(unittest.TestCase):
         code = ("import sys; sys.path.insert(0, " + repr(str(ROOT / "python")) +
                 "); import vimbiosis; vimbiosis.VIM_REPLY_TIMEOUT = " + repr(timeout) +
                 "; vimbiosis.CLIENT_TIMEOUT = " + repr(client_timeout) +
-                "; vimbiosis.main()")
+                "; vimbiosis.bridge()")
         proc = subprocess.Popen([sys.executable, "-c", code, "bridge"],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True)

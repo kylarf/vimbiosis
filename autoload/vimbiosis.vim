@@ -11,7 +11,7 @@ function! vimbiosis#start_bridge() abort
     throw 'vimbiosis: bridge is still starting'
   endif
   let s:root = fnamemodify(expand('<script>:p'), ':h:h')
-  unlet! g:vimbiosis_session
+  unlet! g:vimbiosis_session g:vimbiosis_session_id
   let s:errors = []
   let s:requests = []
   let l:cmd = ['python3', s:root . '/python/vimbiosis.py']
@@ -69,6 +69,7 @@ function! s:message(channel, message) abort
   if get(l:m, 'event', '') ==# 'ready'
         \ && get(l:m, 'session', '') =~# '^\d\+:[0-9a-f]\{64}$'
     let g:vimbiosis_session = l:m.session
+    let g:vimbiosis_session_id = l:m.id
     return
   endif
   if !has_key(l:m, 'id') || !has_key(l:m, 'request')
@@ -119,7 +120,7 @@ function! s:closed(channel) abort
     let s:pump = -1
   endif
   let s:requests = []
-  unlet! g:vimbiosis_job g:vimbiosis_session
+  unlet! g:vimbiosis_job g:vimbiosis_session g:vimbiosis_session_id
 endfunction
 
 function! s:file_buffer(buffer) abort
@@ -139,7 +140,7 @@ function! vimbiosis#remember_window() abort
 endfunction
 
 function! s:workspace() abort
-  let l:result = {'ok': v:true, 'cwd': getcwd(-1, -1), 'buffers': []}
+  let l:result = {'ok': v:true, 'cwd': getcwd(-1), 'buffers': []}
   let l:windows = getwininfo()
   let l:omitted = 0
   for l:buffer in getbufinfo({'buflisted': 1})

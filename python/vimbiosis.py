@@ -3,6 +3,7 @@ import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+from pathlib import Path
 import secrets
 import sys
 import threading
@@ -17,14 +18,14 @@ CLIENT_TIMEOUT = 8
 MAX_BODY = 2 * 1024 * 1024
 
 
-def send_payload(request, timeout=CLIENT_TIMEOUT):
+def send_payload(request, timeout=CLIENT_TIMEOUT, session=None):
     """Call a Vim MCP tool from a short-lived agent hook process."""
     try:
-        port, token = os.environ.get("VIMBIOSIS_SESSION", "").split(":")
+        port, token = (session or os.environ.get("VIMBIOSIS_SESSION", "")).split(":")
         if not token or not 0 < int(port) < 65536:
             raise ValueError("invalid session descriptor")
         operation = request["op"]
-        endpoint = "/mcp" if operation == "workspace" else "/hooks"
+        endpoint = "/mcp" if operation in ("workspace", "probe") else "/hooks"
         opener = build_opener(ProxyHandler({}))
         headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json",
                    "Accept": "application/json, text/event-stream"}
@@ -44,6 +45,8 @@ def send_payload(request, timeout=CLIENT_TIMEOUT):
         initialized = call("initialize", {"protocolVersion": version, "capabilities": {},
                                          "clientInfo": {"name": "Vimbiosis hook",
                                                         "version": "1.0.0"}}, 1)
+        if operation == "probe":
+            return {"ok": True}
         headers["MCP-Protocol-Version"] = initialized["protocolVersion"]
         call("notifications/initialized", {})
         result = call("tools/call", {"name": operation, "arguments": {
@@ -53,7 +56,37 @@ def send_payload(request, timeout=CLIENT_TIMEOUT):
         return {"ok": False, "error": "Vim bridge unavailable: " + str(exc)}
 
 
-def bridge():
+def registry():
+    if os.name == "nt":
+        return Path(os.environ["LOCALAPPDATA"]) / "Vimbiosis" / "sessions"
+    return Path.home() / ".vimbiosis" / "sessions"
+
+
+def publish(port, token):
+    root = registry()
+    root.parent.mkdir(mode=0o700, exist_ok=True)
+    root.mkdir(mode=0o700, exist_ok=True)
+    while True:
+        directory = root / secrets.token_hex(4)
+        try:
+            directory.mkdir(mode=0o700)
+            break
+        except FileExistsError:
+            continue
+    temporary = directory / "pending"
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600),
+                       "w", encoding="utf-8") as output:
+            json.dump({"port": port, "token": token}, output)
+        temporary.replace(directory / "session.json")
+        return directory
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        directory.rmdir()
+        raise
+
+
+def bridge(register=False):
     token = secrets.token_hex(32)
     pending = {}
     snapshots = Snapshots()
@@ -173,14 +206,20 @@ def bridge():
         server.shutdown()
 
     with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
-        print(json.dumps([0, {"event": "ready",
-                              "session": f"{server.server_port}:{token}"}]), flush=True)
-        threading.Thread(target=read_vim, daemon=True).start()
-        server.serve_forever(poll_interval=.2)
+        directory = publish(server.server_port, token) if register else None
+        try:
+            print(json.dumps([0, {"event": "ready", "id": directory.name if directory else "",
+                                  "session": f"{server.server_port}:{token}"}]), flush=True)
+            threading.Thread(target=read_vim, daemon=True).start()
+            server.serve_forever(poll_interval=.2)
+        finally:
+            if directory:
+                (directory / "session.json").unlink(missing_ok=True)
+                directory.rmdir()
 
 
 def main():
-    bridge()
+    bridge(register=True)
 
 
 if __name__ == "__main__":

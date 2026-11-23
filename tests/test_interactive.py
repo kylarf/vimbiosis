@@ -30,6 +30,8 @@ class InteractiveTests(unittest.TestCase):
 import json, pathlib, subprocess, sys, time
 import os, urllib.request
 root, folder = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(root / 'python'))
+from launcher import select
 files = [folder / ('file' + str(i) + '.txt') for i in range(3)]
 for path in files:
     path.write_text('one\\ntwo\\nthree\\n')
@@ -48,6 +50,9 @@ def hook(event, paths, key):
 # Load one file, switch away, then revisit it after another on-disk edit.
 # Leave autoread off, matching Vim's default.
 time.sleep(4.2)
+selected = select(os.environ['ATTACH_ID'])
+assert selected[1] == os.environ['VIMBIOSIS_SESSION']
+assert select(None)[0] == selected[0]
 context = subprocess.run([sys.executable, str(root / 'codex/hooks/post-edit.py')],
     input=json.dumps({'hook_event_name': 'UserPromptSubmit'}),
     capture_output=True, text=True, check=True, timeout=5)
@@ -99,14 +104,16 @@ denied = tool('execute_ex', command='echo "should be blocked"')
                 "new second.txt",
                 "let g:vimbiosis_allow_arbitrary_actions = 1",
                 "nnoremap <F5> :call setline(1, 'unsaved mapping output')<CR>",
-                "call vimbiosis#start_bridge()",
+                "let attach_message = execute('VbioAttach')",
+                "if attach_message !~# 'vimbiosis -s ' . g:vimbiosis_session_id | cquit | endif",
                 "call term_start(" + json.dumps(command) + ", {'env':",
-                "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_session}})",
+                "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_session, 'ATTACH_ID': g:vimbiosis_session_id}})",
                 "let g:vimbiosis_anchor_win = win_getid()",
             ]))
             pid, fd = pty.fork()
             if pid == 0:
                 os.environ["TERM"] = "xterm-256color"
+                os.environ["HOME"] = tmp
                 os.execv(shutil.which("vim"),
                          ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-S", str(boot)])
             screen = b""

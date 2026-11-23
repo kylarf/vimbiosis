@@ -1,7 +1,8 @@
 # Claude Code setup
 
-Start the agent with `:Vbio claude`, or run `:VbioAttach` and use the printed
-exports and launch command in an external shell. Both paths configure the
+Start the agent with `:Vbio claude`, or add this checkout's `bin` directory to
+PATH and run `:VbioAttach` in Vim. In the external shell, run
+`vimbiosis -s ID claude` with the displayed ID. Both paths configure the
 Vim-owned MCP endpoint for that launch.
 
 If upgrading, remove the old Vimbiosis skill symlinks and their matching

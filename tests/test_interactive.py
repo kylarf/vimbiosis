@@ -6,6 +6,7 @@ import select
 import shutil
 import signal
 import struct
+import subprocess
 import sys
 import tempfile
 import time
@@ -21,6 +22,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @unittest.skipIf(os.name == "nt", "requires Unix PTY support")
 class InteractiveTests(unittest.TestCase):
+    def test_quitting_vim_removes_attached_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            session_id = home / "attached"
+            subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es",
+                 "-c", "execute 'set rtp^=' . fnameescape($VBIO_TEST_ROOT)",
+                 "-c", "runtime plugin/vimbiosis.vim",
+                 "-c", "VbioAttach",
+                 "-c", "call writefile([g:vimbiosis_session_id], $VBIO_TEST_SESSION)",
+                 "-c", "q"],
+                env=dict(os.environ, HOME=tmp, VBIO_TEST_ROOT=str(ROOT),
+                         VBIO_TEST_SESSION=str(session_id)),
+                capture_output=True, check=True, timeout=10,
+            )
+            directory = home / ".vimbiosis" / "sessions" / session_id.read_text().strip()
+            deadline = time.monotonic() + 3
+            while directory.exists() and time.monotonic() < deadline:
+                time.sleep(.02)
+            self.assertFalse(directory.exists(), "Vim left its session directory behind")
+
     def test_batch_hook_completes_without_keyboard_input(self):
         with tempfile.TemporaryDirectory(prefix="vbio terminal ") as tmp:
             directory = Path(tmp)

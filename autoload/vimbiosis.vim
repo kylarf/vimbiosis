@@ -15,7 +15,9 @@ function! vimbiosis#start_bridge() abort
   let s:errors = []
   let s:requests = []
   let l:cmd = ['python3', s:root . '/python/vimbiosis.py']
+  " Let stdin close on Vim exit so the bridge can remove its session entry.
   let g:vimbiosis_job = job_start(l:cmd, {
+        \ 'stoponexit': '',
         \ 'in_mode': 'json', 'out_mode': 'json', 'err_mode': 'nl',
         \ 'out_cb': function('s:message'), 'close_cb': function('s:closed'),
         \ 'err_cb': function('s:error')})

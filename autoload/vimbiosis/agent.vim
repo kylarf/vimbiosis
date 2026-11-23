@@ -39,6 +39,7 @@ endfunction
 function! vimbiosis#agent#status() abort
   call vimbiosis#start_bridge()
   echomsg 'Vimbiosis bridge running on 127.0.0.1:' . split(g:vimbiosis_session, ':')[0]
+        \ . ' (session ' . g:vimbiosis_session_id . ')'
 endfunction
 
 function! vimbiosis#agent#detach() abort

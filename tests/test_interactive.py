@@ -6,6 +6,7 @@ import select
 import shutil
 import signal
 import struct
+import subprocess
 import sys
 import tempfile
 import time
@@ -21,6 +22,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @unittest.skipIf(os.name == "nt", "requires Unix PTY support")
 class InteractiveTests(unittest.TestCase):
+    def test_quitting_vim_removes_attached_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            session_id = home / "attached"
+            subprocess.run(
+                ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-es",
+                 "-c", "execute 'set rtp^=' . fnameescape($VBIO_TEST_ROOT)",
+                 "-c", "runtime plugin/vimbiosis.vim",
+                 "-c", "VbioAttach",
+                 "-c", "call writefile([g:vimbiosis_session_id], $VBIO_TEST_SESSION)",
+                 "-c", "q"],
+                env=dict(os.environ, HOME=tmp, VBIO_TEST_ROOT=str(ROOT),
+                         VBIO_TEST_SESSION=str(session_id)),
+                capture_output=True, check=True, timeout=10,
+            )
+            directory = home / ".vimbiosis" / "sessions" / session_id.read_text().strip()
+            deadline = time.monotonic() + 3
+            while directory.exists() and time.monotonic() < deadline:
+                time.sleep(.02)
+            self.assertFalse(directory.exists(), "Vim left its session directory behind")
+
     def test_batch_hook_completes_without_keyboard_input(self):
         with tempfile.TemporaryDirectory(prefix="vbio terminal ") as tmp:
             directory = Path(tmp)
@@ -30,6 +52,8 @@ class InteractiveTests(unittest.TestCase):
 import json, pathlib, subprocess, sys, time
 import os, urllib.request
 root, folder = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(root / 'python'))
+from launcher import select
 files = [folder / ('file' + str(i) + '.txt') for i in range(3)]
 for path in files:
     path.write_text('one\\ntwo\\nthree\\n')
@@ -48,6 +72,9 @@ def hook(event, paths, key):
 # Load one file, switch away, then revisit it after another on-disk edit.
 # Leave autoread off, matching Vim's default.
 time.sleep(4.2)
+selected = select(os.environ['ATTACH_ID'])
+assert selected[1] == os.environ['VIMBIOSIS_SESSION']
+assert select(None)[0] == selected[0]
 context = subprocess.run([sys.executable, str(root / 'codex/hooks/post-edit.py')],
     input=json.dumps({'hook_event_name': 'UserPromptSubmit'}),
     capture_output=True, text=True, check=True, timeout=5)
@@ -99,14 +126,16 @@ denied = tool('execute_ex', command='echo "should be blocked"')
                 "new second.txt",
                 "let g:vimbiosis_allow_arbitrary_actions = 1",
                 "nnoremap <F5> :call setline(1, 'unsaved mapping output')<CR>",
-                "call vimbiosis#start_bridge()",
+                "let attach_message = execute('VbioAttach')",
+                "if attach_message !~# 'vimbiosis -s ' . g:vimbiosis_session_id | cquit | endif",
                 "call term_start(" + json.dumps(command) + ", {'env':",
-                "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_session}})",
+                "\\ {'VIMBIOSIS_SESSION': g:vimbiosis_session, 'ATTACH_ID': g:vimbiosis_session_id}})",
                 "let g:vimbiosis_anchor_win = win_getid()",
             ]))
             pid, fd = pty.fork()
             if pid == 0:
                 os.environ["TERM"] = "xterm-256color"
+                os.environ["HOME"] = tmp
                 os.execv(shutil.which("vim"),
                          ["vim", "-Nu", "NONE", "-i", "NONE", "-n", "-S", str(boot)])
             screen = b""

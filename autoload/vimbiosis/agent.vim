@@ -32,20 +32,22 @@ endfunction
 function! vimbiosis#agent#attach() abort
   call vimbiosis#start_bridge()
   let g:vimbiosis_anchor_win = win_getid()
-  echomsg 'export VIMBIOSIS_SESSION=' . shellescape(g:vimbiosis_session)
-        \ . "\n" . 'export VIMBIOSIS_MCP_BEARER="${VIMBIOSIS_SESSION#*:}"'
-        \ . "\nCodex: " . join(map(['codex', '--no-daemon'] + s:launch_args('codex'), 'shellescape(v:val)'))
-        \ . "\nClaude Code: " . join(map(['claude'] + s:launch_args('claude'), 'shellescape(v:val)'))
+  echomsg 'Vimbiosis session ' . g:vimbiosis_session_id
+        \ . ': use vimbiosis -s ' . g:vimbiosis_session_id . ' <agent> [args] in an external shell'
 endfunction
 
 function! vimbiosis#agent#status() abort
   call vimbiosis#start_bridge()
   echomsg 'Vimbiosis bridge running on 127.0.0.1:' . split(g:vimbiosis_session, ':')[0]
+        \ . ' (session ' . g:vimbiosis_session_id . ')'
 endfunction
 
 function! vimbiosis#agent#detach() abort
-  if exists('g:vimbiosis_job') | call job_stop(g:vimbiosis_job) | unlet g:vimbiosis_job | endif
-  unlet! g:vimbiosis_live_win g:vimbiosis_session
+  if exists('g:vimbiosis_job')
+    call ch_close_in(job_getchannel(g:vimbiosis_job))
+    unlet g:vimbiosis_job
+  endif
+  unlet! g:vimbiosis_live_win g:vimbiosis_session g:vimbiosis_session_id
 endfunction
 
 function! vimbiosis#agent#follow() abort

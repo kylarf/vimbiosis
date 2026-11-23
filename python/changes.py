@@ -73,5 +73,8 @@ class Snapshots:
             if source != path and source in before and baseline is not None and not deleted:
                 baseline[path] = before[source]
                 changes.append({"path": source, "hunks": [], "deleted": True})
-            changes.append({"path": path, "hunks": ranges, "deleted": deleted})
+            change = {"path": path, "hunks": ranges, "deleted": deleted}
+            if source in before and not deleted:
+                change["before_lines"] = before[source] or []
+            changes.append(change)
         return changes

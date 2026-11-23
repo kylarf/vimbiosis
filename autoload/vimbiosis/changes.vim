@@ -2,6 +2,144 @@ let s:entries = []
 let s:owner = 0
 let s:marked = {}
 let s:index = 0
+let s:baselines = {}
+let s:reviews = {}
+let s:suppressed = 0
+
+function! vimbiosis#changes#review_origin() abort
+  let l:review = get(s:reviews, get(t:, 'vimbiosis_review', 0), {})
+  let l:origin = get(l:review, 'origin', 0)
+  if l:origin > 0 && !empty(getwininfo(l:origin))
+    return l:origin
+  endif
+  for l:win in getwininfo()
+    if !gettabvar(l:win.tabnr, 'vimbiosis_review', 0) && !l:win.quickfix
+      return l:win.winid
+    endif
+  endfor
+  return 0
+endfunction
+
+function! vimbiosis#changes#review_update(closing) abort
+  for [l:buf, l:review] in items(copy(s:reviews))
+    let l:live = getwininfo(l:review.live)
+    let l:base = getwininfo(l:review.base)
+    if empty(l:live) || empty(l:base) || l:live[0].bufnr != str2nr(l:buf)
+          \ || l:base[0].bufnr != l:review.scratch
+          \ || index([l:review.live, l:review.base], a:closing) >= 0
+      call remove(s:reviews, l:buf)
+      for l:win in l:live + l:base
+        call settabvar(l:win.tabnr, 'vimbiosis_review', 0)
+        if l:win.winid != a:closing
+          call win_execute(l:win.winid, 'diffoff')
+        endif
+      endfor
+      if getbufvar(str2nr(l:buf), 'changedtick') != l:review.tick
+        call vimbiosis#changes#clear(str2nr(l:buf))
+      endif
+    endif
+  endfor
+  let l:active = get(t:, 'vimbiosis_review', 0)
+  if s:suppressed && s:suppressed != l:active
+    let l:review = get(s:reviews, s:suppressed, {})
+    if !empty(l:review) && getbufvar(s:suppressed, 'changedtick') != l:review.tick
+      call vimbiosis#changes#clear(s:suppressed)
+    endif
+    call vimbiosis#changes#paint(s:suppressed)
+  endif
+  let s:suppressed = l:active
+  if l:active
+    call vimbiosis#changes#paint(l:active)
+  endif
+endfunction
+
+function! vimbiosis#changes#diff() abort
+  let l:buf = bufnr('%')
+  let l:line = line('.')
+  let l:col = col('.')
+  let l:origin = win_getid()
+  if &buftype ==# 'quickfix'
+    if !getwininfo(l:origin)[0].loclist
+      echomsg 'Vimbiosis: select an agent change'
+      return
+    endif
+    let l:list = getloclist(0, {'context': 0, 'items': 0, 'filewinid': 0})
+    let l:items = get(l:list, 'items', [])
+    let l:context = get(l:list, 'context', 0)
+    if type(l:context) != v:t_dict || !get(l:context, 'vimbiosis', 0) || l:line > len(l:items)
+      echomsg 'Vimbiosis: select an agent change'
+      return
+    endif
+    let l:item = l:items[l:line - 1]
+    let l:buf = l:item.bufnr
+    let l:line = l:item.lnum
+    let l:col = l:item.col
+    let l:origin = get(l:list, 'filewinid', 0)
+  endif
+  call s:open_diff(l:buf, l:line, l:col, l:origin)
+endfunction
+
+function! vimbiosis#changes#diff_all() abort
+  let l:origin = get(t:, 'vimbiosis_review', 0) ? vimbiosis#changes#review_origin() :
+        \ (&buftype ==# 'quickfix' ? s:owner : win_getid())
+  let l:seen = {}
+  for l:entry in copy(s:entries)
+    let l:path = resolve(fnamemodify(l:entry.filename, ':p'))
+    if has_key(l:seen, l:path) || get(s:baselines, l:path, v:null) is v:null
+          \ || !filereadable(l:path)
+      continue
+    endif
+    let l:seen[l:path] = 1
+    let l:buf = bufadd(l:path)
+    if !has_key(s:reviews, l:buf)
+      call s:open_diff(l:buf, l:entry.lnum, l:entry.col, l:origin)
+    endif
+  endfor
+  if empty(l:seen)
+    echomsg 'Vimbiosis: no agent changes with an available baseline and live file'
+  endif
+endfunction
+
+function! s:open_diff(buffer, line, col, origin) abort
+  let l:path = a:buffer > 0 ? resolve(fnamemodify(bufname(a:buffer), ':p')) : ''
+  let l:review = get(s:reviews, a:buffer, {})
+  if !empty(l:review) && win_gotoid(l:review.live)
+    call cursor(a:line, a:col)
+    return
+  endif
+  let l:before = get(s:baselines, l:path, v:null)
+  if l:before is v:null || !filereadable(l:path)
+    echomsg 'Vimbiosis: no available baseline and live file to compare'
+    return
+  endif
+  let l:return = win_getid()
+  let l:parent = tabpagenr()
+  try
+    execute 'tab sbuffer ' . a:buffer
+    let l:live = win_getid()
+    call vimbiosis#changes#enter()
+    aboveleft vertical new
+    setlocal buftype=nofile bufhidden=wipe nobuflisted noswapfile
+    execute 'file ' . fnameescape('[Vimbiosis baseline ' . l:live . ']')
+    call setline(1, empty(l:before) ? [''] : l:before)
+    setlocal nomodified readonly nomodifiable
+    let s:reviews[a:buffer] = {'live': l:live, 'base': win_getid(), 'scratch': bufnr('%'),
+          \ 'origin': a:origin, 'tick': getbufvar(a:buffer, 'changedtick')}
+    let t:vimbiosis_review = a:buffer
+    diffthis
+    call win_gotoid(l:live)
+    diffthis
+    call cursor(a:line, a:col)
+    call vimbiosis#changes#review_update(0)
+  catch
+    let l:error = v:exception
+    if tabpagenr() != l:parent
+      silent tabclose
+    endif
+    call win_gotoid(l:return)
+    echomsg 'Vimbiosis: could not open diff: ' . l:error
+  endtry
+endfunction
 
 highlight default link VimbiosisAdded DiffAdd
 highlight default link VimbiosisChanged DiffChange
@@ -106,6 +244,9 @@ function! vimbiosis#changes#paint(buffer) abort
     return
   endif
   call sign_unplace('Vimbiosis', {'buffer': a:buffer})
+  if a:buffer == get(t:, 'vimbiosis_review', 0)
+    return
+  endif
   let l:virtual = get(g:, 'vimbiosis_enable_virtual_text', 1)
         \ && has('textprop') && has('patch-9.0.0438')
   let l:hunks = getbufvar(a:buffer, 'vimbiosis_hunks', [])
@@ -201,18 +342,25 @@ function! vimbiosis#changes#enter() abort
   if get(b:, 'vimbiosis_pending_reload', 0)
     let b:vimbiosis_pending_reload = 0
     silent keepalt edit
+    if has_key(s:reviews, bufnr('%'))
+      let s:reviews[bufnr('%')].tick = b:changedtick
+    endif
   endif
   call vimbiosis#changes#paint(bufnr('%'))
 endfunction
 
 function! vimbiosis#changes#record(change, window) abort
   let l:path = a:change.path
+  let s:baselines[resolve(fnamemodify(l:path, ':p'))] = get(a:change, 'before_lines', v:null)
   call filter(s:entries, 'v:val.filename !=# l:path')
   let l:buf = bufnr(l:path)
   if l:buf >= 0
     call vimbiosis#changes#clear(l:buf)
     if !get(a:change, 'deleted', 0)
       call setbufvar(l:buf, 'vimbiosis_hunks', a:change.hunks)
+      if has_key(s:reviews, l:buf)
+        let s:reviews[l:buf].tick = getbufvar(l:buf, 'changedtick')
+      endif
       let s:marked[l:buf] = 1
       if !getbufvar(l:buf, 'vimbiosis_pending_reload', 0)
         call vimbiosis#changes#paint(l:buf)
@@ -227,7 +375,8 @@ function! vimbiosis#changes#record(change, window) abort
   let l:owner = get(g:, 'vimbiosis_live_win', 0)
   if empty(getwininfo(l:owner))
     let l:owner = !empty(getwininfo(s:owner)) ? s:owner :
-          \ (a:window > 0 ? a:window : win_getid())
+          \ (get(t:, 'vimbiosis_review', 0) ? vimbiosis#changes#review_origin() :
+          \ (a:window > 0 ? a:window : win_getid()))
   endif
   if l:owner != s:owner
     if !empty(getwininfo(s:owner))
@@ -304,6 +453,7 @@ function! vimbiosis#changes#navigate(action) abort
 endfunction
 
 function! vimbiosis#changes#reset() abort
+  let s:baselines = {}
   for l:buf in keys(copy(s:marked))
     call vimbiosis#changes#clear(str2nr(l:buf))
   endfor

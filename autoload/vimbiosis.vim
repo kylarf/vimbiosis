@@ -346,6 +346,13 @@ function! vimbiosis#refresh(file, ...) abort
   call bufload(l:buf)
   call setbufvar(l:buf, 'vimbiosis_pending_reload', 0)
   if !exists('g:vimbiosis_live_win') || empty(getwininfo(g:vimbiosis_live_win))
+    if get(t:, 'vimbiosis_review', 0)
+      let l:origin = vimbiosis#changes#review_origin()
+      if !l:origin || !win_gotoid(l:origin)
+        call setbufvar(l:buf, 'vimbiosis_pending_reload', 1)
+        return 0
+      endif
+    endif
     let g:vimbiosis_live_win = s:destination(0)
   endif
   call s:reload(g:vimbiosis_live_win, l:buf)

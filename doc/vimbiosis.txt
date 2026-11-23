@@ -13,6 +13,8 @@ COMMANDS                                                *vimbiosis-commands*
 :VbioDetach                       Stop the bridge and detach.
 :VbioFollow                       Toggle automatic file following.
 :VbioChanges                      Open the change location list.
+:VbioDiff                         Review the current file in a native diff tab.
+:VbioDiffAll                      Review all changed files in native diff tabs.
 :VbioToggleChanges                Toggle the agent change location list.
 :VbioNext                         Jump to the next changed region.
 :VbioPrevious                     Jump to the previous changed region.
@@ -91,6 +93,14 @@ Other buffers retain their markers. Change-list entries remain navigable;
 clearing markers does not remove them. Each later edit replaces the displayed
 regions with the cumulative diff for that file. Returning to the baseline
 clears the file's review entries. :VbioChangesClear clears the list and markers.
+
+:VbioDiff opens or focuses a side-by-side review tab from a file or selected
+Vimbiosis location-list row. The left pane holds the pre-edit snapshot and
+the right pane is the live file buffer. Use [c and ]c to move between hunks,
+do to restore a hunk from the left, and :tabclose to leave the review.
+Inline markers return when you leave the review if the buffer has not changed.
+:VbioDiffAll opens one review tab per changed file with a readable live file
+and a pre-edit snapshot. Existing review tabs are kept.
 
 :VbioChanges opens a location list of changed regions across files. Select an
 entry with Enter or use :VbioNext and :VbioPrevious. Within the associated file

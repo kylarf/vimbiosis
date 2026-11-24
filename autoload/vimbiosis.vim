@@ -2,6 +2,7 @@ let s:requests = []
 let s:pump = -1
 let s:draining = 0
 let s:errors = []
+let s:root = fnamemodify(expand('<sfile>:p'), ':h:h')
 
 function! vimbiosis#start_bridge() abort
   if exists('g:vimbiosis_job') && job_status(g:vimbiosis_job) ==# 'run'
@@ -10,7 +11,6 @@ function! vimbiosis#start_bridge() abort
     endif
     throw 'vimbiosis: bridge is still starting'
   endif
-  let s:root = fnamemodify(expand('<script>:p'), ':h:h')
   unlet! g:vimbiosis_session g:vimbiosis_session_id
   let s:errors = []
   let s:requests = []
